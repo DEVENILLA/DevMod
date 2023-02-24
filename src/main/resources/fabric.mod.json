@@ -3,23 +3,26 @@
 	"id": "devmod",
 	"version": "${version}",
 	"name": "Dev's Expansion",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "a mod created by Sir Devenilla to expand minecraft",
 	"authors": [
-		"Me!"
+		"Sir Devenilla!"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://linktr.ee/devenilla",
+		"sources": "https://github.com/DEVENILLA/DevMod"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/devmod/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"sir.dev.ExampleMod"
+			"sir.dev.DevMod"
+		],
+		"client": [
+			"sir.dev.DevModClient"
 		],
 		"fabric-datagen": [
-			"sir.dev.ExampleModDataGenerator"
+			"sir.dev.DevModDataGenerator"
 		]
 	},
 	"mixins": [
