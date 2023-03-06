@@ -1,24 +1,36 @@
 package sir.dev.client.entity.dev;
 
 import net.fabricmc.tinyremapper.extension.mixin.common.Logger;
+import net.minecraft.client.render.OverlayTexture;
+import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.entity.EntityRendererFactory;
+import net.minecraft.client.render.entity.GlowSquidEntityRenderer;
+import net.minecraft.client.render.entity.feature.EndermanEyesFeatureRenderer;
 import net.minecraft.client.render.model.json.ModelTransformation;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.item.ShieldItem;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.util.Identifier;
 import net.minecraft.util.math.RotationAxis;
 import org.jetbrains.annotations.Nullable;
 import sir.dev.DevMod;
 import sir.dev.common.entity.dev.DevEntity;
 import sir.dev.common.util.DEV_CONSTS;
+import sir.dev.common.util.DevHealthState;
 import software.bernie.geckolib.cache.object.BakedGeoModel;
 import software.bernie.geckolib.cache.object.GeoBone;
+import software.bernie.geckolib.cache.texture.AutoGlowingTexture;
+import software.bernie.geckolib.core.animatable.GeoAnimatable;
+import software.bernie.geckolib.model.GeoModel;
 import software.bernie.geckolib.renderer.DynamicGeoEntityRenderer;
+import software.bernie.geckolib.renderer.GeoRenderer;
+import software.bernie.geckolib.renderer.layer.AutoGlowingGeoLayer;
 import software.bernie.geckolib.renderer.layer.BlockAndItemGeoLayer;
+import software.bernie.geckolib.renderer.layer.GeoRenderLayer;
 import software.bernie.shadowed.eliotlash.mclib.math.functions.classic.Abs;
 
 
@@ -32,6 +44,8 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
     public DevEntityRenderer(EntityRendererFactory.Context renderManager) {
         super(renderManager, new DevEntityModel());
         this.shadowRadius = .3f;
+
+        addRenderLayer(new AutoGlowingGeoLayer<>(this));
 
         // Add some held item rendering
         addRenderLayer(new BlockAndItemGeoLayer<>(this)
@@ -63,7 +77,7 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
 
                 if (stack == DevEntityRenderer.this.mainHandItem) {
                     poseStack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(-90f));
-                    poseStack.translate(0, 0, -0.1);
+                    poseStack.translate(0, 0, 0);
 
                     poseStack.scale(1f, 1f, 1f);
                     if (stack.getItem() instanceof ShieldItem)
@@ -73,7 +87,7 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
                     }
                 }
                 else if (stack == DevEntityRenderer.this.offhandItem) {
-                    poseStack.translate(0, 0, 0.1);
+                    poseStack.translate(0, 0, 0);
                     poseStack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(-90f));
 
                     poseStack.scale(1f, 1f, 1f);

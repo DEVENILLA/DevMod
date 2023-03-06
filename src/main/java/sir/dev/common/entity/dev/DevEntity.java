@@ -1,18 +1,22 @@
 package sir.dev.common.entity.dev;
 
 import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.Hopper;
-import net.minecraft.block.entity.HopperBlockEntity;
+import net.minecraft.block.TntBlock;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.ai.goal.*;
+import net.minecraft.entity.LightningEntity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.ai.TargetPredicate;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.data.DataTracker;
 import net.minecraft.entity.data.TrackedData;
 import net.minecraft.entity.data.TrackedDataHandlerRegistry;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.entity.passive.PassiveEntity;
 import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
@@ -20,15 +24,14 @@ import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.Inventories;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.inventory.SimpleInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
+import net.minecraft.item.*;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.particle.ParticleTypes;
-import net.minecraft.predicate.entity.EntityPredicates;
 import net.minecraft.screen.NamedScreenHandlerFactory;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.server.ServerConfigHandler;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.sound.SoundEvents;
@@ -36,21 +39,21 @@ import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.ItemScatterer;
-import net.minecraft.util.TypeFilter;
 import net.minecraft.util.collection.DefaultedList;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.random.Random;
+import net.minecraft.util.math.*;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
+import sir.dev.DevMod;
+import sir.dev.client.hud.dev.DevHudOverlay;
 import sir.dev.client.screen.dev.DevScreenHandler;
+import sir.dev.common.entity.dev.combats.DevCombatHandler;
+import sir.dev.common.entity.dev.goals.*;
 import sir.dev.common.item.ModItems;
+import sir.dev.common.item.dev.DevItem;
 import sir.dev.common.util.DEV_CONSTS;
+import sir.dev.common.util.DevHealthState;
 import sir.dev.common.util.DevState;
 import software.bernie.geckolib.animatable.GeoEntity;
-import software.bernie.geckolib.constant.DefaultAnimations;
 import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
 import software.bernie.geckolib.core.animation.*;
 import software.bernie.geckolib.core.object.PlayState;
@@ -59,13 +62,19 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Predicate;
 
 public class DevEntity extends TameableEntity implements GeoEntity {
 
     private static final TrackedData<ItemStack> TrackedMainHandItem = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.ITEM_STACK);
     private static final TrackedData<ItemStack> TrackedOffHandItem = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.ITEM_STACK);
     private static final TrackedData<String> TrackedDevState = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.STRING);
+    private static final TrackedData<Boolean> TrackedDevCalled = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
+    private static final TrackedData<Boolean> TrackedDevAI = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
+    private static final TrackedData<Integer> TrackedMainCooldown = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.INTEGER);
+    private static final TrackedData<Integer> TrackedOffCooldown = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.INTEGER);
+
+    public static final float CHASE_DISTANCE = 64;
+    public static final float TARGET_DISTANCE = 20;
 
     public DevEntity(EntityType<? extends TameableEntity> entityType, World world) {
         super(entityType, world);
@@ -76,11 +85,11 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     public static DefaultAttributeContainer.Builder setAttributes()
     {
         return TameableEntity.createMobAttributes()
-                .add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.4)
-                .add(EntityAttributes.GENERIC_MAX_HEALTH, 150)
-                .add(EntityAttributes.GENERIC_ARMOR, 20)
-                .add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 20)
-                .add(EntityAttributes.GENERIC_FOLLOW_RANGE, 48)
+                .add(EntityAttributes.GENERIC_MOVEMENT_SPEED, 0.3)
+                .add(EntityAttributes.GENERIC_MAX_HEALTH, DEV_CONSTS.MAX_HP)
+                .add(EntityAttributes.GENERIC_ARMOR, 10)
+                .add(EntityAttributes.GENERIC_ATTACK_DAMAGE, 12)
+                .add(EntityAttributes.GENERIC_FOLLOW_RANGE, CHASE_DISTANCE)
                 .add(EntityAttributes.GENERIC_KNOCKBACK_RESISTANCE, 0.7)
                 .add(EntityAttributes.GENERIC_ATTACK_SPEED, 5)
                 .add(EntityAttributes.GENERIC_ATTACK_KNOCKBACK, 1);
@@ -88,90 +97,14 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
     @Override
     protected void initGoals() {
-        this.goalSelector.add(1, new FollowOwnerGoal(this, 1.0, 10.0F, 2.0F, false)
-        {
-            @Override
-            public boolean canStart() {
-                if (DevEntity.this.getState() == DevState.sitting) return false;
-                return super.canStart();
-            }
-
-            @Override
-            public boolean canStop() {
-                if (DevEntity.this.getState() == DevState.sitting) return true;
-                return super.canStop();
-            }
-        });
-        this.goalSelector.add(4, new SwimGoal(this)
-        {
-            @Override
-            public boolean canStart() {
-                if (DevEntity.this.getState() == DevState.sitting) return false;
-                return super.canStart();
-            }
-
-            @Override
-            public boolean canStop() {
-                if (DevEntity.this.getState() == DevState.sitting) return true;
-                return super.canStop();
-            }
-        });
-        this.goalSelector.add(5, new SitGoal(this)
-        {
-            @Override
-            public boolean canStart() {
-                if (DevEntity.this.getState() == DevState.sitting) return true;
-                return super.canStart();
-            }
-
-            @Override
-            public boolean canStop() {
-                if (DevEntity.this.getState() == DevState.sitting) return false;
-                return super.canStop();
-            }
-        });
-        this.goalSelector.add(6, new WanderAroundFarGoal(this, 1.0)
-        {
-            @Override
-            public boolean canStart() {
-                if (DevEntity.this.getState() == DevState.sitting) return false;
-                return super.canStart();
-            }
-
-            @Override
-            public boolean canStop() {
-                if (DevEntity.this.getState() == DevState.sitting) return true;
-                return super.canStop();
-            }
-        });
-        this.goalSelector.add(7, new LookAtEntityGoal(this, PlayerEntity.class, 8.0F)
-        {
-            @Override
-            public boolean canStart() {
-                if (DevEntity.this.getState() == DevState.sitting) return false;
-                return super.canStart();
-            }
-
-            @Override
-            public boolean canStop() {
-                if (DevEntity.this.getState() == DevState.sitting) return true;
-                return super.canStop();
-            }
-        });
-        this.goalSelector.add(8, new LookAroundGoal(this)
-        {
-            @Override
-            public boolean canStart() {
-                if (DevEntity.this.getState() == DevState.sitting) return false;
-                return super.canStart();
-            }
-
-            @Override
-            public boolean canStop() {
-                if (DevEntity.this.getState() == DevState.sitting) return true;
-                return super.canStop();
-            }
-        });
+        this.goalSelector.add(1, new DevFollowOwnerWhenCalledGoal(this, 1.5, .75F, .25F, true, false));
+        this.goalSelector.add(2, new DevFollowOwnerGoal(this, 1.2, CHASE_DISTANCE, 2F, true,false, false));
+        this.goalSelector.add(3, new DevMeleeAttackGoal((PathAwareEntity) this, 1.5f,.1f, false));
+        this.goalSelector.add(4, new DevFollowOwnerGoal(this, 1.0, 5F, 2F, false,false, false));
+        this.goalSelector.add(5, new DevLookAroundGoal((MobEntity) this));
+        this.goalSelector.add(6, new DevWanderAroundGoal((PathAwareEntity) this, 1f));
+        this.goalSelector.add(7, new DevLookAtEntityGoal((MobEntity) this, PlayerEntity.class, 5));
+        this.goalSelector.add(8, new DevSwimAroundGoal((PathAwareEntity) this, 1.0, 1));
     }
 
     @Override
@@ -179,18 +112,178 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         this.dataTracker.startTracking(TrackedMainHandItem, ItemStack.EMPTY);
         this.dataTracker.startTracking(TrackedOffHandItem, ItemStack.EMPTY);
         this.dataTracker.startTracking(TrackedDevState, DevState.getDefault().name());
+        this.dataTracker.startTracking(TrackedDevCalled, false);
+        this.dataTracker.startTracking(TrackedDevAI, true);
+        this.dataTracker.startTracking(TrackedMainCooldown, 80);
+        this.dataTracker.startTracking(TrackedOffCooldown, 120);
         super.initDataTracker();
     }
 
     @Override
     public void tick() {
         super.tick();
+        this.world.getWorldChunk(this.getBlockPos()).setLoadedToWorld(true);
+        this.world.getWorldChunk(this.getBlockPos()).loadEntities();
+        this.world.getWorldChunk(this.getBlockPos()).setShouldRenderOnUpdate(true);
+
         if (!this.world.isClient())
         {
+            this.HandleStatesWhenTick();
             this.dataTracker.set(TrackedMainHandItem, this.getInventory().getStack(9));
             this.dataTracker.set(TrackedOffHandItem, this.getInventory().getStack(10));
             this.dataTracker.set(TrackedDevState, this.getState().name());
+
+            this.dataTracker.set(TrackedMainCooldown, this.dataTracker.get(TrackedMainCooldown)-1);
+            this.dataTracker.set(TrackedOffCooldown, this.dataTracker.get(TrackedOffCooldown)-1);
+
+            if (IsDevAIcontrolled())
+            {
+                if (this.getMainCooldown() <= 0 && DevHudOverlay.canUse(this, this.getMainHandStack()))
+                {
+                    if (random.nextBetween(1, 50) == 5) UseItemInHand(Hand.MAIN_HAND);
+                }
+
+                if (this.getOffCooldown() <= 0 && DevHudOverlay.canUse(this, this.getOffHandStack()))
+                {
+                    if (random.nextBetween(1, 50) == 5) UseItemInHand(Hand.OFF_HAND);
+                }
+            }
+
+            if (this.getDevState() == DevState.sitting)
+            {
+                this.setTarget(null);
+            }
+
+            if (getOwner() == null)
+            {
+                ArrayList<PlayerEntity> players = (ArrayList<PlayerEntity>) this.world.getPlayers();
+                for (PlayerEntity player : players)
+                {
+                    if (DevItem.GetDevFromPlayer(player) != null && DevItem.GetDevFromPlayer(player) == this)
+                    {
+                        this.setOwner(player);
+                    }
+                }
+            }
+            else
+            {
+                DevItem.SaveDevToPlayer(((PlayerEntity)this.getOwner()), this);
+
+                if (this.getOwner().isDead())
+                {
+                    if (this.getOwner() instanceof ServerPlayerEntity serverPlayer && this.getOwner().getWorld() instanceof ServerWorld serverWorld)
+                    {
+                        BlockPos pos = serverWorld.getSpawnPos();
+                        this.setPosition(pos.getX(), pos.getY(), pos.getZ());
+                    }
+                }
+            }
+
+            HandleTargeting();
         }
+    }
+
+    @Override
+    public void checkDespawn() {
+        this.world.getWorldChunk(this.getBlockPos()).setLoadedToWorld(true);
+        this.world.getWorldChunk(this.getBlockPos()).loadEntities();
+    }
+    @Override
+    public boolean canImmediatelyDespawn(double distanceSquared) {
+        return false;
+    }
+
+    public void HandleTargeting()
+    {
+        if (this.world.isClient) return;
+        if (getOwner() == null) return;
+
+        if (this.world instanceof ServerWorld serverWorld)
+        {
+            if (this.getTarget() == null)
+            {
+                List<LivingEntity> entities = serverWorld.getEntitiesByClass(
+                        LivingEntity.class,
+                        Box.of(DevEntity.this.getOwner().getPos(), TARGET_DISTANCE, CHASE_DISTANCE*2, TARGET_DISTANCE),
+                        mobEntity -> IsViableTarget(mobEntity) == true
+                );
+
+                LivingEntity closestTarget = serverWorld.getClosestEntity(
+                        entities,
+                        TargetPredicate.DEFAULT,
+                        this.getOwner(),
+                        this.getOwner().getX(),
+                        this.getOwner().getY(),
+                        this.getOwner().getZ()
+                );
+
+                if (closestTarget != null && IsViableTarget(closestTarget))
+                {
+                    this.setTarget(closestTarget);
+                }
+            }
+            else
+            {
+                if (!IsViableTarget(this.getTarget()))
+                {
+                    setTarget(null);
+                }
+            }
+        }
+    }
+
+    public boolean IsViableTarget(LivingEntity entity)
+    {
+        DevEntity dev = DevEntity.this;
+        if (dev.getDevState() != DevState.defending || dev.IsDevCalled() == true || dev.getOwner() == null)
+        {
+            return false;
+        }
+
+        if (DEV_CONSTS.GetDistance(entity.getPos(), dev.getPos()) >= CHASE_DISTANCE)
+        {
+            return false;
+        }
+
+        if (entity == dev)
+        {
+            return false;
+        }
+
+        if (entity instanceof TameableEntity tamed && tamed.isTamed() && tamed.getOwner() != null && tamed.getOwner() == dev.getOwner())
+        {
+            return false;
+        }
+
+        if (entity instanceof MobEntity mob)
+        {
+            if
+            (
+                    dev.getOwner().getAttacker() != mob &&
+                            dev.getOwner() != mob.getAttacker() &&
+                            dev.getOwner() != mob.getTarget() &&
+                            dev != mob.getTarget() &&
+                            dev.getAttacker() != mob
+            )
+            {
+                return false;
+            }
+        }
+
+        if (entity == dev.getOwner())
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    public void ClearTargets()
+    {
+        this.getOwner().setAttacker(null);
+        this.getOwner().setAttacking(null);
+        this.setAttacker(null);
+        this.setTarget(null);
     }
 
     @Override
@@ -214,6 +307,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
                 DEV_CONSTS.setInventoryStacks(devItem.getNbt(), this.getInventoryStacks());
                 DEV_CONSTS.setState(devItem.getNbt(), this.getState());
+                devItem.getNbt().putBoolean(DEV_CONSTS.NBT_KEY_AI_CONTROL, this.IsDevAIcontrolled());
                 DEV_CONSTS.setHP(devItem.getNbt(), (int)this.getHealth());
                 DEV_CONSTS.setOwner(devItem.getNbt(), player.getUuid());
 
@@ -223,29 +317,26 @@ public class DevEntity extends TameableEntity implements GeoEntity {
             }
             else
             {
-                if (handStack.getItem() == Items.EMERALD_BLOCK)
+                if (handStack.getItem() == Items.EMERALD_BLOCK && this.getHealth() < DEV_CONSTS.MAX_HP)
                 {
-                    heal(15);
-                    for (int i = 0; i < 30; i++)
+                    this.heal(15);
+                    if (world instanceof ServerWorld serverWorld)
                     {
-                        double randomX = random.nextBetween(25, 150) / 100;
-                        double randomY = random.nextBetween(25, 150) / 100;
-                        double randomZ = random.nextBetween(25, 150) / 100;
-                        world.addParticle(ParticleTypes.HEART, this.getX()+randomX, this.getY()+randomY, this.getZ()+randomZ, 0, .1f, 0);
+                        serverWorld.spawnParticles(
+                                ParticleTypes.HEART,
+                                this.getX(),
+                                this.getY(),
+                                this.getZ(),
+                                5,
+                                1,
+                                1,
+                                1,
+                                .5f
+                        );
                     }
                     handStack.decrement(1);
                     player.setStackInHand(Hand.MAIN_HAND, handStack);
-                }
-                else if (handStack.getItem() == Items.STICK)
-                {
-                    if (this.getState() == DevState.sitting)
-                    {
-                        this.setState(DevState.following);
-                    }
-                    else
-                    {
-                        this.setState(DevState.sitting);
-                    }
+                    if (this.getHealth() >= DEV_CONSTS.MAX_HP) this.setHealth((float) DEV_CONSTS.MAX_HP);
                 }
                 else
                 {
@@ -271,6 +362,114 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         }
     }
 
+
+    @Override
+    public void onAttacking(Entity target) {
+        super.onAttacking(target);
+        this.triggerAnim("other", "attack");
+        if (this.world.isClient)return;
+        if (target instanceof LivingEntity)
+        {
+            this.HurtUsingItem(this.getMainHandStack(), (LivingEntity) target);
+            this.HurtUsingItem(this.getOffHandStack(), (LivingEntity) target);
+            this.HandleStatesWhenAttackEntity((LivingEntity) target);
+        }
+    }
+
+    public void HandleStatesWhenAttackEntity(LivingEntity target)
+    {
+        if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.NEAR_INFECTED)
+        {
+            target.takeKnockback(1, this.getX(), this.getZ());
+        }
+        if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.ALMOST_INFECTED)
+        {
+            this.world.createExplosion(this, target.getX(), target.getY(), target.getZ(), 0, World.ExplosionSourceType.MOB);
+            target.takeKnockback(2, this.getX(), this.getZ());
+        }
+        else if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.COMPLETELY_INFECTED)
+        {
+            this.world.createExplosion(this, target.getX(), target.getY(), target.getZ(), 1, World.ExplosionSourceType.MOB);
+            Entity lightning = new LightningEntity(EntityType.LIGHTNING_BOLT, this.world);
+            lightning.setPos(target.getX(), target.getY(), target.getZ());
+            this.world.spawnEntity(lightning);
+            target.takeKnockback(3, this.getX(), this.getZ());
+        }
+    }
+
+    public void HandleStatesWhenTick()
+    {
+        if (this.world instanceof ServerWorld serverWorld)
+        {
+            if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.NEAR_INFECTED)
+            {
+                serverWorld.spawnParticles(ParticleTypes.PORTAL, this.getX(), this.getY(), this.getZ(), 5, .5, .5, .5, .2);
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 5*20, 1));
+            }
+            if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.ALMOST_INFECTED)
+            {
+                serverWorld.spawnParticles(ParticleTypes.PORTAL, this.getX(), this.getY(), this.getZ(), 10, .5, .5, .5, .2);
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 5*20, 2));
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 5*20, 2));
+            }
+            else if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.COMPLETELY_INFECTED)
+            {
+                serverWorld.spawnParticles(ParticleTypes.PORTAL, this.getX(), this.getY(), this.getZ(), 10, .5, .5, .5, .2);
+                serverWorld.spawnParticles(ParticleTypes.REVERSE_PORTAL, this.getX(), this.getY(), this.getZ(), 10, 2, 2, 2, .2);
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 5*20, 3));
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 5*20, 3));
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 5*20, 3));
+            }
+        }
+    }
+
+    public void HurtUsingItem(ItemStack itemStack, LivingEntity target)
+    {
+        Item item = itemStack.getItem();
+        DamageSource dmgSource = DamageSource.GENERIC;
+        if (item instanceof BlockItem b && b.getBlock() instanceof TntBlock)
+        {
+            this.world.createExplosion(this, target.getX(), target.getY(), target.getZ(), 1, World.ExplosionSourceType.MOB);
+        }
+    }
+
+    public void UseItemInHand(Hand handType)
+    {
+        if (this.world.isClient) return;
+        if (this.getTarget() == null) return;
+        if (this.getOwner() == null) return;
+
+        ItemStack MainStack = this.getMainHandStack();
+        ItemStack OtherStack = this.getOffHandStack();
+        if (handType == Hand.OFF_HAND)
+        {
+            MainStack = this.getOffHandStack();
+            OtherStack = this.getMainHandStack();
+        }
+
+        Item MainStackItem = MainStack.getItem();
+        Item OtherStackItem = OtherStack.getItem();
+
+        float cooldownInSecs = 0;
+
+        if (MainStackItem instanceof SwordItem) cooldownInSecs = DevCombatHandler.OnUseSword(this, MainStack, OtherStack, handType);
+        else if (MainStackItem instanceof AxeItem) cooldownInSecs = DevCombatHandler.OnUseAxe(this, MainStack, OtherStack, handType);
+        else if (MainStackItem instanceof TridentItem) cooldownInSecs = DevCombatHandler.OnUseTrident(this, MainStack, OtherStack, handType);
+        else if (MainStackItem instanceof ShieldItem) cooldownInSecs = DevCombatHandler.OnUseShield(this, MainStack, OtherStack, handType);
+        else if (MainStackItem instanceof BowItem) cooldownInSecs = DevCombatHandler.OnUseBow(this, MainStack, OtherStack, handType);
+        else if (MainStackItem instanceof CrossbowItem) cooldownInSecs = DevCombatHandler.OnUseCrossbow(this, MainStack, OtherStack, handType);
+        else if (MainStackItem instanceof BlockItem block && block.getBlock() instanceof TntBlock) cooldownInSecs = DevCombatHandler.OnUseTNT(this, MainStack, OtherStack, handType);
+
+        if (handType == Hand.MAIN_HAND)
+        {
+            this.setMainCooldown((int)(cooldownInSecs * 20));
+        }
+        else if (handType == Hand.OFF_HAND)
+        {
+            this.setOffCooldown((int)(cooldownInSecs * 20));
+        }
+    }
+
     @Override
     public void onDeath(DamageSource damageSource) {
         super.onDeath(damageSource);
@@ -282,6 +481,12 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     }
 
     @Override
+    public boolean onKilledOther(ServerWorld world, LivingEntity other) {
+        this.setTarget(null);
+        return super.onKilledOther(world, other);
+    }
+
+    @Override
     public void playStepSound(BlockPos pos, BlockState blockIn) {
         this.playSound( SoundEvents.BLOCK_AMETHYST_BLOCK_STEP, .15f, 1.0f );
     }
@@ -289,6 +494,11 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     @Override
     public boolean cannotDespawn() {
         return  true;
+    }
+
+    @Override
+    public boolean isImmuneToExplosion() {
+        return true;
     }
 
     @Override
@@ -320,6 +530,8 @@ public class DevEntity extends TameableEntity implements GeoEntity {
             return false;
         if (source == DamageSource.WITHER)
             return false;
+        if (source == DamageSource.LIGHTNING_BOLT)
+            return false;
         if (source.getDeathMessage(this).equals("witherSkull"))
             return false;
 
@@ -330,6 +542,15 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     @Override
     public PassiveEntity createChild(ServerWorld world, PassiveEntity entity) {
         return null;
+    }
+
+    public boolean isPlayerStaring(PlayerEntity player) {
+        Vec3d vec3d = player.getRotationVec(1.0F).normalize();
+        Vec3d vec3d2 = new Vec3d(this.getX() - player.getX(), this.getEyeY() - player.getEyeY(), this.getZ() - player.getZ());
+        double d = vec3d2.length();
+        vec3d2 = vec3d2.normalize();
+        double e = vec3d.dotProduct(vec3d2);
+        return e > 1.0D - 0.025D / d ? player.canSee(this) : false;
     }
 
     @Override
@@ -357,8 +578,27 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         return this.PersistentData;
     }
 
+    public Boolean IsDevCalled() { return this.dataTracker.get(TrackedDevCalled); }
+
+    public void setDevCalled(Boolean val) { this.dataTracker.set(TrackedDevCalled, val); }
+
+    public Boolean IsDevAIcontrolled() { return this.dataTracker.get(TrackedDevAI); }
+
+    public void setDevAIcontrol(Boolean val) { this.dataTracker.set(TrackedDevAI, val); }
+
+    public int getMainCooldown() { return this.dataTracker.get(TrackedMainCooldown); }
+    public void setMainCooldown(int ticks) { this.dataTracker.set(TrackedMainCooldown, ticks); }
+
+    public int getOffCooldown() { return this.dataTracker.get(TrackedOffCooldown); }
+    public void setOffCooldown(int ticks) { this.dataTracker.set(TrackedOffCooldown, ticks); }
+
     public void setPersistentData(NbtCompound persistentData) {
         this.PersistentData = persistentData;
+    }
+
+    @Override
+    public UUID getUuid() {
+        return this.uuid;
     }
 
     @Override
@@ -370,6 +610,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         if (this.getOwnerUuid() != null) {
             this.getPersistentData().putUuid("Owner", this.getOwnerUuid());
         }
+        this.getPersistentData().putBoolean(DEV_CONSTS.NBT_KEY_AI_CONTROL, dataTracker.get(TrackedDevAI));
         return super.writeNbt(nbt);
     }
 
@@ -386,6 +627,9 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     public void readDevNBT()
     {
         UUID uUID;
+        if (this.getPersistentData().contains(DEV_CONSTS.NBT_KEY_AI_CONTROL)) {
+            dataTracker.set(TrackedDevAI, this.getPersistentData().getBoolean(DEV_CONSTS.NBT_KEY_AI_CONTROL));
+        }
         if (this.getPersistentData().containsUuid("Owner")) {
             uUID = this.getPersistentData().getUuid("Owner");
         } else {
@@ -487,6 +731,9 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
     private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
 
+    public static final RawAnimation ATTACK_ANIM = RawAnimation.begin().thenPlay("attack");
+    public static final RawAnimation LEAP_ANIM = RawAnimation.begin().thenPlay("spin");
+
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
         controllers.add(new AnimationController<>(this, "controller", 5, state -> {
@@ -509,6 +756,11 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         }).setSoundKeyframeHandler(event -> {
 
         }));
+
+        controllers.add(new AnimationController<>(this, "other", 5, animationState -> PlayState.CONTINUE)
+                .triggerableAnim("attack", ATTACK_ANIM)
+                .triggerableAnim("leap", LEAP_ANIM)
+        );
     }
 
     @Override

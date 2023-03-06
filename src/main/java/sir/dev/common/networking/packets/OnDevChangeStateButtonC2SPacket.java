@@ -12,7 +12,7 @@ import sir.dev.common.util.DEV_CONSTS;
 import sir.dev.common.util.DevState;
 import sir.dev.common.util.IEntityDataSaver;
 
-public class DevCallC2SPacket
+public class OnDevChangeStateButtonC2SPacket
 {
     public static void receive(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler,
                                PacketByteBuf buf, PacketSender responseSender)
@@ -22,9 +22,20 @@ public class DevCallC2SPacket
         {
             DevEntity dev = DevItem.GetDevFromPlayer(player);
 
-            if (dev instanceof DevEntity && dev != null && dev.isAlive() && dev.getDevState() != DevState.sitting)
+            if (dev != null && dev.isAlive() && dev.isPlayerStaring(player))
             {
-                dev.setDevCalled(true);
+                switch (dev.getDevState())
+                {
+                    case defending -> {
+                        dev.setState(DevState.following);
+                    }
+                    case following -> {
+                        dev.setState(DevState.sitting);
+                    }
+                    case sitting -> {
+                        dev.setState(DevState.defending);
+                    }
+                }
                 dev.ClearTargets();
             }
         }

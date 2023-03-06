@@ -29,6 +29,7 @@ public class CombatDevScreenSlot extends Slot
         if (i instanceof CrossbowItem) return true;
         if (i instanceof ShieldItem) return true;
         if (i instanceof TridentItem) return true;
+        if (i instanceof BlockItem block && block.getBlock() instanceof TntBlock) return true;
         return false;
     }
 }

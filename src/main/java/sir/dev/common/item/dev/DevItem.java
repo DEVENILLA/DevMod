@@ -24,12 +24,13 @@ import net.minecraft.util.Rarity;
 import net.minecraft.util.TypedActionResult;
 import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.World;
 import net.minecraft.world.event.GameEvent;
 import org.jetbrains.annotations.Nullable;
-import sir.dev.client.item.dev.DevItemRenderer;
+import sir.dev.DevMod;
 import sir.dev.client.screen.dev.DevScreenHandler;
 import sir.dev.common.entity.ModEntities;
 import sir.dev.common.entity.dev.DevEntity;
@@ -49,14 +50,14 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-public class DevItem extends Item implements GeoItem {
+public class DevItem extends Item {
 
     public DevItem(Settings settings)
     {
         super(settings);
-        SingletonGeoAnimatable.registerSyncedAnimatable(this);
     }
 
     public static Settings GetSettings()
@@ -79,6 +80,16 @@ public class DevItem extends Item implements GeoItem {
         }
 
         return stack.getNbt().getInt(DEV_CONSTS.NBT_KEY_HP);
+    }
+
+    public static boolean getAIControlled(ItemStack stack)
+    {
+        if (!stack.getNbt().contains(DEV_CONSTS.NBT_KEY_AI_CONTROL))
+        {
+            stack.getNbt().putBoolean(DEV_CONSTS.NBT_KEY_AI_CONTROL, true);
+        }
+
+        return stack.getNbt().getBoolean(DEV_CONSTS.NBT_KEY_AI_CONTROL);
     }
 
     public static Inventory getInventory(NbtCompound nbt)
@@ -137,8 +148,13 @@ public class DevItem extends Item implements GeoItem {
         tooltip.add(Text.literal(
                 "§lState§r : " + curState.toString()
         ));
+
         tooltip.add(Text.literal(
                 "§l§4Health§f§r : (" + curHP + " §l/§r " + DEV_CONSTS.MAX_HP + ") "
+        ));
+
+        tooltip.add(Text.literal(
+                "§l§2Controller§f§r : " + ((getAIControlled(stack) == true) ? "AI" : "user")
         ));
 
         if (!inv.isEmpty())
@@ -181,11 +197,6 @@ public class DevItem extends Item implements GeoItem {
     @Override
     public void inventoryTick(ItemStack stack, World world, Entity entity, int slot, boolean selected) {
 
-        if (world instanceof ServerWorld serverLevel)
-        {
-            triggerAnim(entity, GeoItem.getOrAssignId(stack, serverLevel), "idle_controller", "idle");
-        }
-
         if (!stack.getNbt().contains(DEV_CONSTS.NBT_KEY_HP))
         {
             stack.getNbt().putInt(DEV_CONSTS.NBT_KEY_HP, DEV_CONSTS.MAX_HP);
@@ -197,44 +208,6 @@ public class DevItem extends Item implements GeoItem {
         }
 
         super.inventoryTick(stack, world, entity, slot, selected);
-    }
-
-    //ANIMATION HANDLING
-    private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
-    private final Supplier<Object> renderProvider = GeoItem.makeRenderer(this);
-
-    @Override
-    public void createRenderer(Consumer<Object> consumer) {
-        consumer.accept(new RenderProvider() {
-            private DevItemRenderer renderer;
-
-            @Override
-            public DevItemRenderer getCustomRenderer() {
-                if (this.renderer == null)
-                    this.renderer = new DevItemRenderer();
-
-                return this.renderer;
-            }
-        });
-    }
-
-    @Override
-    public Supplier<Object> getRenderProvider() {
-        return renderProvider;
-    }
-
-    private static final RawAnimation IDLE_ANIM = RawAnimation.begin().thenPlay("idle");
-
-    @Override
-    public void registerControllers(AnimatableManager.ControllerRegistrar controllerRegistrar) {
-        controllerRegistrar.add(new AnimationController<>(this, "idle_controller", 5, animationState -> PlayState.CONTINUE)
-                .triggerableAnim("idle", IDLE_ANIM)
-        );
-    }
-
-    @Override
-    public AnimatableInstanceCache getAnimatableInstanceCache() {
-        return this.cache;
     }
 
     public ActionResult useOnBlock(ItemUsageContext context) {
@@ -254,6 +227,8 @@ public class DevItem extends Item implements GeoItem {
         EntityType<?> entityType2 = ModEntities.DEV;
         DevEntity spawned = (DevEntity)entityType2.spawnFromItemStack((ServerWorld)world, itemStack, context.getPlayer(), blockPos2, SpawnReason.SPAWN_EGG, true, !Objects.equals(blockPos, blockPos2) && direction == Direction.UP);
         if (spawned != null) {
+            SaveDevToPlayer(context.getPlayer(), spawned);
+            spawned.setDevAIcontrol(getAIControlled(itemStack));
             spawned.setOwner(context.getPlayer());
             spawned.setHealth(getHP(itemStack));
 
@@ -261,54 +236,51 @@ public class DevItem extends Item implements GeoItem {
 
             spawned.setState(getState(itemStack.getNbt()));
             spawned.setInventoryStacks(getInventory(itemStack.getNbt()));
-            if (DEV_CONSTS.getOwner(itemStack.getNbt()) != null) spawned.setOwner(context.getWorld().getPlayerByUuid(DEV_CONSTS.getOwner(itemStack.getNbt())));
 
             spawned.setPersistentData(nbt);
 
             itemStack.decrement(1);
             world.emitGameEvent((Entity)context.getPlayer(), GameEvent.ENTITY_PLACE, blockPos);
-
-            SaveDevToPlayer(context.getPlayer(), spawned);
         }
         return ActionResult.CONSUME;
     }
 
-    public void SaveDevToPlayer(PlayerEntity player, DevEntity dev)
+    public static void SaveDevToPlayer(PlayerEntity player, DevEntity dev)
     {
         World world = player.getWorld();
 
         if (world.isClient()) return;
 
         IEntityDataSaver playerData = (IEntityDataSaver)player;
-        NbtCompound playerNBT = playerData.getPersistentData();
 
-        playerNBT.putInt(DEV_CONSTS.NBT_KEY_OWNED_DEV, dev.getId());
-
-        playerData.setPersistentData(playerNBT);
+        playerData.getPersistentData().putUuid(DEV_CONSTS.NBT_KEY_OWNED_DEV, dev.getUuid());
     }
 
     public static boolean PlayerHasDevAlive(PlayerEntity player)
     {
+        if (GetDevFromPlayer(player) != null) return true;
+        return false;
+    }
+
+    public static DevEntity GetDevFromPlayer(PlayerEntity player)
+    {
         World world = player.getWorld();
 
-        if (world.isClient()) return true;
-
         IEntityDataSaver playerData = (IEntityDataSaver)player;
-        NbtCompound playerNBT = playerData.getPersistentData();
-        if (playerNBT.contains(DEV_CONSTS.NBT_KEY_OWNED_DEV))
+        if (playerData.getPersistentData().contains(DEV_CONSTS.NBT_KEY_OWNED_DEV))
         {
-
-            DevEntity dev = (DevEntity) world.getEntityById(playerNBT.getInt(DEV_CONSTS.NBT_KEY_OWNED_DEV));
-
-            if (dev instanceof DevEntity && dev != null && dev.isAlive())
+            if (world instanceof ServerWorld serverWorld)
             {
-                playerData.setPersistentData(playerNBT);
-                return true;
+                Entity dev = serverWorld.getEntity(playerData.getPersistentData().getUuid(DEV_CONSTS.NBT_KEY_OWNED_DEV));
+
+                if ( dev != null && dev instanceof DevEntity devEntity && devEntity.isAlive())
+                {
+                    return devEntity;
+                }
             }
         }
-        playerData.setPersistentData(playerNBT);
 
-        return false;
+        return null;
     }
 
     @Override

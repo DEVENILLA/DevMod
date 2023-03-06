@@ -1,6 +1,12 @@
 {
   "item.devmod.dev_item" : "§aDev",
 
+  "entity.devmod.dev" : "Dev",
+
   "key.category.devmod.dev" : "Dev Mod Keybindings",
-  "key.devmod.call_dev" : "Call Dev"
+  "key.devmod.call_dev" : "Call Dev",
+  "key.devmod.use_dev_main" : "Use Dev's main hand item",
+  "key.devmod.use_dev_off" : "Use Dev's off hand item",
+  "key.devmod.change_state_dev" : "Change Dev State",
+  "key.devmod.dev_switch_ai" : "Switch Dev Controller"
 }

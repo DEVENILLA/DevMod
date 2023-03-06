@@ -1,5 +1,6 @@
 package sir.dev.common.util;
 
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.Inventories;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.inventory.SimpleInventory;
@@ -8,7 +9,11 @@ import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.util.ItemScatterer;
 import net.minecraft.util.collection.DefaultedList;
+import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
+import sir.dev.common.entity.dev.DevEntity;
+import sir.dev.common.item.dev.DevItem;
 
 import java.util.UUID;
 
@@ -22,9 +27,9 @@ public class DEV_CONSTS
     public static final String NBT_KEY_HP = "HP";
     public static final String NBT_KEY_OWNER = "Owner";
     public static final String NBT_KEY_STATE = "STATE";
+    public static final String NBT_KEY_AI_CONTROL = "AIC";
     public static final String NBT_KEY_DATA = "devmod.data";
     public static final String NBT_KEY_OWNED_DEV = "curDev";
-
 
     public static Inventory getInventory(NbtCompound nbt)
     {
@@ -36,6 +41,17 @@ public class DEV_CONSTS
             inv.setStack(i, itemStacks.get(i));
         }
         return inv;
+    }
+
+    public static double GetDistance(Vec3d vec1, Vec3d vec2)
+    {
+        double dis = 0;
+
+        dis = Math.sqrt(
+                Math.pow(vec1.x - vec2.x, 2) +  Math.pow(vec1.y - vec2.y, 2) + Math.pow(vec1.z - vec2.z, 2)
+        );
+
+        return dis;
     }
 
     public static DefaultedList<ItemStack> getInventoryStacks(NbtCompound nbt)
