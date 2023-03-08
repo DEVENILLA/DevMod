@@ -61,11 +61,6 @@ public class DevEntityModel extends GeoModel<DevEntity> {
     }
 
     @Override
-    public RenderLayer getRenderType(DevEntity animatable, Identifier texture) {
-        return RenderLayer.getEntityTranslucent(texture);
-    }
-
-    @Override
     public Identifier getAnimationResource(DevEntity dev) {
         Identifier anim = new Identifier(DevMod.MOD_ID, "animations/dev.animation.json");
         DevHealthState state = DevHealthState.getHealthState(dev.getHealth(), (float) DEV_CONSTS.MAX_HP);

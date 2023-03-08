@@ -3,6 +3,7 @@ package sir.dev;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.impl.client.rendering.EntityRendererRegistryImpl;
 import net.minecraft.client.gui.screen.ingame.HandledScreens;
 import sir.dev.client.entity.dev.DevEntityRenderer;
 import sir.dev.client.hud.dev.DevHudOverlay;
@@ -15,7 +16,7 @@ import sir.dev.common.networking.ModNetworking;
 public class DevModClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
-        EntityRendererRegistry.register(ModEntities.DEV, DevEntityRenderer::new);
+        registerRenderers();
 
         KeyInputHandler.register();
 
@@ -24,5 +25,10 @@ public class DevModClient implements ClientModInitializer {
         HandledScreens.register(ModScreenHandlers.DEV_SCREEN_HANDLER_TYPE, DevScreen::new);
 
         HudRenderCallback.EVENT.register(new DevHudOverlay());
+    }
+
+    public static void registerRenderers()
+    {
+        EntityRendererRegistry.register(ModEntities.DEV, DevEntityRenderer::new);
     }
 }

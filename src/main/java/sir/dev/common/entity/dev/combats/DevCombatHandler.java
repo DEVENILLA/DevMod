@@ -20,6 +20,7 @@ import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.state.property.Properties;
 import net.minecraft.util.Hand;
+import net.minecraft.util.JsonSerializableType;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
@@ -38,8 +39,11 @@ public class DevCombatHandler
             @Override
             public void execute() {
                 super.execute();
+                dev.triggerAnim("other", "leap");
                 serverWorld.spawnParticles(ParticleTypes.SWEEP_ATTACK, dev.getX(), dev.getY(), dev.getZ(), 30, 2, .5, 2, .35);
                 List<LivingEntity> entities = getAffectableEntitiesInARange(serverWorld, dev, dev.getPos(), 4, 1, 4);
+
+                MainStack.use(world, (PlayerEntity) owner, hand);
 
                 for (LivingEntity entity : entities)
                 {
@@ -60,15 +64,17 @@ public class DevCombatHandler
             @Override
             public void execute() {
                 super.execute();
-                serverWorld.spawnParticles(ParticleTypes.ELECTRIC_SPARK, dev.getX(), dev.getY(), dev.getZ(), 30, 2, 1, 2, .35);
+                serverWorld.spawnParticles(ParticleTypes.LARGE_SMOKE, dev.getX(), dev.getY(), dev.getZ(), 30, 2, 1, 2, .35);
                 List<LivingEntity> entities = getAffectableEntitiesInARange(serverWorld, dev, dev.getPos(), 4, 1, 4);
-
+                dev.triggerAnim("other", "leap");
                 for (LivingEntity entity : entities)
                 {
                     dev.tryAttack(entity);
                     serverWorld.spawnParticles(ParticleTypes.SWEEP_ATTACK, entity.getX(), entity.getY(), entity.getZ(), 1, 0, 0, 0, 0);
                     entity.addVelocity(0, 1, 0);
                 }
+
+                MainStack.use(world, (PlayerEntity) owner, hand);
 
                 serverWorld.playSound(dev.getX(), dev.getY(), dev.getZ(), SoundEvents.BLOCK_ANVIL_HIT, SoundCategory.HOSTILE, 100, 1, true);
 
@@ -94,8 +100,8 @@ public class DevCombatHandler
                 for (int i = 0; i < blocks.size(); i++)
                 {
                     BlockPos pos = new BlockPos(blockPositions.get(i).getX(), blockPositions.get(i).getY(), blockPositions.get(i).getZ());
-                    FallingBlockEntity falling = new FallingBlockEntity(EntityType.FALLING_BLOCK, world);
-                    world.setBlockState(pos, serverWorld.getBlockState(pos).getFluidState().getBlockState(), Block.SKIP_DROPS);
+
+                    FallingBlockEntity falling = FallingBlockEntity.spawnFromBlock(serverWorld, pos, blocks.get(i));
                     falling.setPos(pos.getX(), pos.getY()+.5, pos.getZ());
                     falling.addVelocity(0, (Random.create().nextBetween(50, 120) / 100),0);
                     world.spawnEntity(falling);
@@ -114,15 +120,18 @@ public class DevCombatHandler
             public void execute() {
                 super.execute();
                 serverWorld.spawnParticles(ParticleTypes.CLOUD, dev.getX(), dev.getY(), dev.getZ(), 10, .5, .5, .5, .45);
+                dev.triggerAnim("other", "leap");
+
+                MainStack.use(world, (PlayerEntity) owner, hand);
 
                 double xDir = target.getX() - dev.getX();
                 double yDir = target.getY() - dev.getY();
                 double zDir = target.getZ() - dev.getZ();
                 double magnitude = Math.sqrt(Math.pow(xDir, 2)+Math.pow(yDir, 2)+Math.pow(zDir, 2));
                 Vec3d Velocity = new Vec3d
-                        (xDir/magnitude * 1.5,
-                                yDir/magnitude * 1.5,
-                                zDir/magnitude * 1.5);
+                        (xDir/magnitude * 2,
+                                yDir/magnitude * 2,
+                                zDir/magnitude * 2);
 
                 dev.setVelocity(Velocity);
                 dev.lookAt(EntityAnchorArgumentType.EntityAnchor.FEET, target.getPos());
