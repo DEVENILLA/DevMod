@@ -51,6 +51,7 @@ import sir.dev.common.entity.dev.combats.DevCombatHandler;
 import sir.dev.common.entity.dev.goals.*;
 import sir.dev.common.item.ModItems;
 import sir.dev.common.item.dev.DevItem;
+import sir.dev.common.networking.packets.OnDevOwnerSetsTarget;
 import sir.dev.common.util.DEV_CONSTS;
 import sir.dev.common.util.DevHealthState;
 import sir.dev.common.util.DevState;
@@ -74,6 +75,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     private static final TrackedData<Integer> TrackedMainCooldown = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.INTEGER);
     private static final TrackedData<Integer> TrackedOffCooldown = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.INTEGER);
     private static final TrackedData<Integer> TrackedParticleEffectsAnimTickrate = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.INTEGER);
+    private static final TrackedData<Boolean> TrackedDevOwnerLookingAtEntity = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
 
     public static final float CHASE_DISTANCE = 64;
     public static final float TARGET_DISTANCE = 20;
@@ -115,6 +117,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         this.dataTracker.startTracking(TrackedOffHandItem, ItemStack.EMPTY);
         this.dataTracker.startTracking(TrackedDevState, DevState.getDefault().name());
         this.dataTracker.startTracking(TrackedDevCalled, false);
+        this.dataTracker.startTracking(TrackedDevOwnerLookingAtEntity, false);
         this.dataTracker.startTracking(TrackedDevAI, true);
         this.dataTracker.startTracking(TrackedMainCooldown, 80);
         this.dataTracker.startTracking(TrackedParticleEffectsAnimTickrate, -5);
@@ -137,6 +140,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
             this.dataTracker.set(TrackedMainHandItem, this.getInventory().getStack(9));
             this.dataTracker.set(TrackedOffHandItem, this.getInventory().getStack(10));
             this.dataTracker.set(TrackedDevState, this.getState().name());
+            this.dataTracker.set(TrackedDevOwnerLookingAtEntity, this.isAimingAtTarget());
 
             this.dataTracker.set(TrackedMainCooldown, this.dataTracker.get(TrackedMainCooldown)-1);
             this.dataTracker.set(TrackedOffCooldown, this.dataTracker.get(TrackedOffCooldown)-1);
@@ -202,7 +206,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
                 List<LivingEntity> entities = serverWorld.getEntitiesByClass(
                         LivingEntity.class,
                         Box.of(DevEntity.this.getOwner().getPos(), TARGET_DISTANCE, CHASE_DISTANCE*2, TARGET_DISTANCE),
-                        mobEntity -> IsViableTarget(mobEntity) == true
+                        mobEntity -> IsViableTarget(mobEntity, false) == true
                 );
 
                 LivingEntity closestTarget = serverWorld.getClosestEntity(
@@ -214,14 +218,14 @@ public class DevEntity extends TameableEntity implements GeoEntity {
                         this.getOwner().getZ()
                 );
 
-                if (closestTarget != null && IsViableTarget(closestTarget))
+                if (closestTarget != null && IsViableTarget(closestTarget, false))
                 {
                     this.setTarget(closestTarget);
                 }
             }
             else
             {
-                if (!IsViableTarget(this.getTarget()))
+                if (!IsViableTarget(this.getTarget(), true))
                 {
                     setTarget(null);
                 }
@@ -229,13 +233,15 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         }
     }
 
-    public boolean IsViableTarget(LivingEntity entity)
+    public boolean IsViableTarget(LivingEntity entity, boolean noTargetCheck)
     {
         DevEntity dev = DevEntity.this;
         if (dev.getDevState() != DevState.defending || dev.IsDevCalled() == true || dev.getOwner() == null)
         {
             return false;
         }
+
+        if (entity == null || entity.isDead()) return false;
 
         if (DEV_CONSTS.GetDistance(entity.getPos(), dev.getPos()) >= CHASE_DISTANCE*2)
         {
@@ -252,18 +258,21 @@ public class DevEntity extends TameableEntity implements GeoEntity {
             return false;
         }
 
-        if (entity instanceof MobEntity mob)
+        if (!noTargetCheck)
         {
-            if
-            (
-                    dev.getOwner().getAttacker() != mob &&
-                            dev.getOwner() != mob.getAttacker() &&
-                            dev.getOwner() != mob.getTarget() &&
-                            dev != mob.getTarget() &&
-                            dev.getAttacker() != mob
-            )
+            if (entity instanceof MobEntity mob)
             {
-                return false;
+                if
+                (
+                        dev.getOwner().getAttacker() != mob &&
+                                dev.getOwner() != mob.getAttacker() &&
+                                dev.getOwner() != mob.getTarget() &&
+                                dev != mob.getTarget() &&
+                                dev.getAttacker() != mob
+                )
+                {
+                    return false;
+                }
             }
         }
 
@@ -273,6 +282,46 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         }
 
         return true;
+    }
+
+    public boolean isAimingAtTarget()
+    {
+        PlayerEntity player = (PlayerEntity) this.getOwner();
+        if (player != null)
+        {
+            //Everything here happens only on the server
+            if (DevItem.PlayerHasDevAlive(player))
+            {
+                if (this != null && this.isAlive() && this.getDevState() == DevState.defending)
+                {
+                    World world = player.getWorld();
+                    if (world != null && !world.isClient())
+                    {
+                        LivingEntity target = null;
+
+                        List<MobEntity> entities = world.getEntitiesByClass(
+                                MobEntity.class,
+                                Box.of(player.getPos(), 48, 48, 48),
+                                livingEntity -> {
+                                    if (livingEntity != null)
+                                    {
+                                        if (livingEntity == null || !livingEntity.isAlive()) return false;
+                                        if (livingEntity == this || livingEntity == this.getOwner()) return false;
+                                        if (!OnDevOwnerSetsTarget.isPlayerStaring(player, livingEntity)) return false;
+                                        if (!OnDevOwnerSetsTarget.IsViableTarget(this, livingEntity)) return false;
+                                    }
+                                    return true;
+                                }
+                        );
+
+                        if (entities != null && entities.size() > 0) target = entities.get(0);
+
+                        if (target != null) return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     public void ClearTargets()
@@ -647,6 +696,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     public void setDevCalled(Boolean val) { this.dataTracker.set(TrackedDevCalled, val); }
 
     public Boolean IsDevAIcontrolled() { return this.dataTracker.get(TrackedDevAI); }
+    public Boolean IsDevOwnerLookin() { return this.dataTracker.get(TrackedDevOwnerLookingAtEntity); }
 
     public void setDevAIcontrol(Boolean val) { this.dataTracker.set(TrackedDevAI, val); }
 

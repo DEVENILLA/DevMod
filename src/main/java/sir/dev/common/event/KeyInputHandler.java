@@ -8,6 +8,7 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import org.lwjgl.glfw.GLFW;
 import sir.dev.common.networking.ModNetworking;
+import sir.dev.common.util.DEV_CONSTS;
 
 public class KeyInputHandler
 {
@@ -17,12 +18,14 @@ public class KeyInputHandler
     public static final String KEY_USE_MAIN = "key.devmod.use_dev_main";
     public static final String KEY_USE_OFF = "key.devmod.use_dev_off";
     public static final String KEY_SWITCH_AI = "key.devmod.dev_switch_ai";
+    public static final String KEY_DEV_TARGET = "key.devmod.dev_target";
 
     public static KeyBinding callDevKey;
     public static KeyBinding changeDevStateKey;
     public static KeyBinding useMainKey;
     public static KeyBinding useOffKey;
     public static KeyBinding switchAIKey;
+    public static KeyBinding devTargetKey;
 
     public static void registerKeyInputs() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -54,13 +57,19 @@ public class KeyInputHandler
                 ClientPlayNetworking.send(ModNetworking.SWITCH_DEV_AI_ID, PacketByteBufs.create());
             }
         });
+
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if(devTargetKey.wasPressed()) {
+                ClientPlayNetworking.send(ModNetworking.DEV_OWNER_SETS_TARGET_ID, PacketByteBufs.create());
+            }
+        });
     }
 
     public static void register() {
         callDevKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 KEY_CALL_DEV,
                 InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_Y,
+                GLFW.GLFW_KEY_G,
                 KEY_CATEGORY_DEV//adds it to the key group
         ));
         changeDevStateKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -72,19 +81,25 @@ public class KeyInputHandler
         useMainKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 KEY_USE_MAIN,
                 InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_K,
+                GLFW.GLFW_KEY_V,
                 KEY_CATEGORY_DEV//adds it to the key group
         ));
         useOffKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 KEY_USE_OFF,
                 InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_J,
+                GLFW.GLFW_KEY_B,
                 KEY_CATEGORY_DEV//adds it to the key group
         ));
         switchAIKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 KEY_SWITCH_AI,
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_M,
+                KEY_CATEGORY_DEV//adds it to the key group
+        ));
+        devTargetKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                KEY_DEV_TARGET,
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_CAPS_LOCK,
                 KEY_CATEGORY_DEV//adds it to the key group
         ));
 

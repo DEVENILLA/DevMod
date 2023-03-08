@@ -13,6 +13,7 @@ public class ModNetworking
     public static final Identifier USE_DEV_MAIN_ITEM_ID = new Identifier(DevMod.MOD_ID, "dev_use_main");
     public static final Identifier USE_DEV_OFF_ITEM_ID = new Identifier(DevMod.MOD_ID, "dev_use_off");;
     public static final Identifier SWITCH_DEV_AI_ID = new Identifier(DevMod.MOD_ID, "dev_switch_ai");
+    public static final Identifier DEV_OWNER_SETS_TARGET_ID = new Identifier(DevMod.MOD_ID, "dev_target");
 
     //C2S
     public static void registerClientToServerPackets()
@@ -22,6 +23,7 @@ public class ModNetworking
         ServerPlayNetworking.registerGlobalReceiver(USE_DEV_MAIN_ITEM_ID, DevUseMain::receive);
         ServerPlayNetworking.registerGlobalReceiver(USE_DEV_OFF_ITEM_ID, DevUseOff::receive);
         ServerPlayNetworking.registerGlobalReceiver(SWITCH_DEV_AI_ID, DevSwitchAI::receive);
+        ServerPlayNetworking.registerGlobalReceiver(DEV_OWNER_SETS_TARGET_ID, OnDevOwnerSetsTarget::receive);
     }
 
     //S2C

@@ -29,6 +29,7 @@ import sir.dev.common.entity.dev.DevEntity;
 import sir.dev.common.util.DEV_CONSTS;
 import sir.dev.common.util.DevHealthState;
 import sir.dev.common.util.DevState;
+import software.bernie.example.client.renderer.entity.layer.CoolKidGlassesLayer;
 import software.bernie.geckolib.cache.object.BakedGeoModel;
 import software.bernie.geckolib.cache.object.GeoBone;
 import software.bernie.geckolib.cache.texture.AutoGlowingTexture;
@@ -44,8 +45,6 @@ import software.bernie.shadowed.eliotlash.mclib.math.functions.classic.Abs;
 
 
 public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
-
-    private int currentTick = -1;
     private static final String LEFT_HAND = "lefthand";
     private static final String RIGHT_HAND = "righthand";
     public ItemStack mainHandItem;
@@ -54,11 +53,12 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
     public DevEntityRenderer(EntityRendererFactory.Context renderManager) {
 
         super(renderManager, new DevEntityModel());
-        this.shadowRadius = .3f;
-        this.addRenderLayer(new AutoGlowingGeoLayer<DevEntity>(this));
 
-        // Add some held item rendering
-        addRenderLayer(new BlockAndItemGeoLayer<>(this)
+        this.shadowRadius = .3f;
+
+        this.addRenderLayer(new DevEntityLayer(this));
+
+        this.addRenderLayer(new BlockAndItemGeoLayer<>(this)
         {
             @Nullable
             @Override
@@ -111,8 +111,6 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
                 super.renderStackForBone(poseStack, bone, stack, animatable, bufferSource, partialTick, packedLight, packedOverlay);
             }
         });
-
-        //addRenderLayer(new AutoGlowingGeoLayer<>(this));
     }
 
     @Override
@@ -120,10 +118,5 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
         super.preRender(poseStack, animatable, model, bufferSource, buffer, isReRender, partialTick, packedLight, packedOverlay, red, green, blue, alpha);
         this.mainHandItem = animatable.getMainHandStack();
         this.offhandItem = animatable.getOffHandStack();
-    }
-
-    @Override
-    public void postRender(MatrixStack poseStack, DevEntity animatable, BakedGeoModel model, VertexConsumerProvider bufferSource, VertexConsumer buffer, boolean isReRender, float partialTick, int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {
-        super.postRender(poseStack, animatable, model, bufferSource, buffer, isReRender, partialTick, packedLight, packedOverlay, red, green, blue, alpha);
     }
 }
