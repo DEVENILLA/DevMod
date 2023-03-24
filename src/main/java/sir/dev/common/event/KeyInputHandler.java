@@ -39,7 +39,7 @@ public class KeyInputHandler
                 ClientPlayNetworking.send(ModNetworking.CHANGE_DEV_STATE_ID, PacketByteBufs.create());
             }
         });
-
+/*
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if(useMainKey.wasPressed()) {
                 ClientPlayNetworking.send(ModNetworking.USE_DEV_MAIN_ITEM_ID, PacketByteBufs.create());
@@ -57,6 +57,7 @@ public class KeyInputHandler
                 ClientPlayNetworking.send(ModNetworking.SWITCH_DEV_AI_ID, PacketByteBufs.create());
             }
         });
+        */
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if(devTargetKey.wasPressed()) {
@@ -78,6 +79,7 @@ public class KeyInputHandler
                 GLFW.GLFW_KEY_H,
                 KEY_CATEGORY_DEV//adds it to the key group
         ));
+        /*
         useMainKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 KEY_USE_MAIN,
                 InputUtil.Type.KEYSYM,
@@ -96,6 +98,7 @@ public class KeyInputHandler
                 GLFW.GLFW_KEY_M,
                 KEY_CATEGORY_DEV//adds it to the key group
         ));
+        */
         devTargetKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 KEY_DEV_TARGET,
                 InputUtil.Type.KEYSYM,

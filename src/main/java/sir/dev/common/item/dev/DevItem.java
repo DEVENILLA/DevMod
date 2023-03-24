@@ -4,6 +4,7 @@ import net.fabricmc.fabric.api.item.v1.FabricItemSettings;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.client.item.TooltipContext;
+import net.minecraft.client.render.item.BuiltinModelItemRenderer;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnReason;
@@ -24,19 +25,22 @@ import net.minecraft.util.Rarity;
 import net.minecraft.util.TypedActionResult;
 import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.World;
 import net.minecraft.world.event.GameEvent;
 import org.jetbrains.annotations.Nullable;
 import sir.dev.DevMod;
-import sir.dev.client.screen.dev.DevScreenHandler;
+import sir.dev.client.item.dev.DevItemRenderer;
+import sir.dev.client.screen.dev.*;
 import sir.dev.common.entity.ModEntities;
 import sir.dev.common.entity.dev.DevEntity;
 import sir.dev.common.util.DEV_CONSTS;
+import sir.dev.common.util.DevHealthState;
 import sir.dev.common.util.DevState;
 import sir.dev.common.util.IEntityDataSaver;
+import software.bernie.example.client.renderer.item.JackInTheBoxRenderer;
+import software.bernie.example.registry.SoundRegistry;
 import software.bernie.geckolib.animatable.GeoItem;
 import software.bernie.geckolib.animatable.SingletonGeoAnimatable;
 import software.bernie.geckolib.animatable.client.RenderProvider;
@@ -45,19 +49,20 @@ import software.bernie.geckolib.core.animation.AnimatableManager;
 import software.bernie.geckolib.core.animation.AnimationController;
 import software.bernie.geckolib.core.animation.RawAnimation;
 import software.bernie.geckolib.core.object.PlayState;
+import software.bernie.geckolib.util.ClientUtils;
 import software.bernie.geckolib.util.GeckoLibUtil;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-public class DevItem extends Item {
+public class DevItem extends Item implements GeoItem {
 
     public DevItem(Settings settings)
     {
         super(settings);
+        SingletonGeoAnimatable.registerSyncedAnimatable(this);
     }
 
     public static Settings GetSettings()
@@ -153,9 +158,9 @@ public class DevItem extends Item {
                 "§l§4Health§f§r : (" + curHP + " §l/§r " + DEV_CONSTS.MAX_HP + ") "
         ));
 
-        tooltip.add(Text.literal(
-                "§l§2Controller§f§r : " + ((getAIControlled(stack) == true) ? "AI" : "user")
-        ));
+        //tooltip.add(Text.literal(
+        //        "§l§2Controller§f§r : " + ((getAIControlled(stack) == true) ? "AI" : "user")
+        //));
 
         if (!inv.isEmpty())
         {
@@ -196,7 +201,6 @@ public class DevItem extends Item {
 
     @Override
     public void inventoryTick(ItemStack stack, World world, Entity entity, int slot, boolean selected) {
-
         if (!stack.getNbt().contains(DEV_CONSTS.NBT_KEY_HP))
         {
             stack.getNbt().putInt(DEV_CONSTS.NBT_KEY_HP, DEV_CONSTS.MAX_HP);
@@ -205,6 +209,31 @@ public class DevItem extends Item {
         if (!stack.getNbt().contains(DEV_CONSTS.NBT_KEY_STATE))
         {
             stack.getNbt().putString(DEV_CONSTS.NBT_KEY_STATE, DevState.getDefault().toString());
+        }
+
+        if (world instanceof ServerWorld serverLevel)
+        {
+            DevHealthState healthState = DevHealthState.getHealthState(getHP(stack), DEV_CONSTS.MAX_HP);
+            if (healthState == DevHealthState.BIT_INFECTED)
+            {
+                triggerAnim(entity, GeoItem.getOrAssignId(stack, serverLevel), "main", "bit");
+            }
+            else if (healthState == DevHealthState.NEAR_INFECTED)
+            {
+                triggerAnim(entity, GeoItem.getOrAssignId(stack, serverLevel), "main", "near");
+            }
+            else if (healthState == DevHealthState.ALMOST_INFECTED)
+            {
+                triggerAnim(entity, GeoItem.getOrAssignId(stack, serverLevel), "main", "almost");
+            }
+            else if (healthState == DevHealthState.COMPLETELY_INFECTED)
+            {
+                triggerAnim(entity, GeoItem.getOrAssignId(stack, serverLevel), "main", "complete");
+            }
+            else
+            {
+                triggerAnim(entity, GeoItem.getOrAssignId(stack, serverLevel), "main", "normal");
+            }
         }
 
         super.inventoryTick(stack, world, entity, slot, selected);
@@ -309,11 +338,107 @@ public class DevItem extends Item {
     }
 
     public ScreenHandler createMenu(int syncId, PlayerInventory inv, PlayerEntity player, ItemStack stack) {
-
-        return new DevScreenHandler(syncId, player.getInventory(), getInventory(stack.getNbt()), stack, null);
+        if (DevHealthState.getHealthState(getHP(stack), DEV_CONSTS.MAX_HP) == DevHealthState.BIT_INFECTED)
+        {
+            return new Damaged1DevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    getInventory(stack.getNbt()),
+                    stack,
+                    null
+            );
+        }
+        else if (DevHealthState.getHealthState(getHP(stack), DEV_CONSTS.MAX_HP) == DevHealthState.NEAR_INFECTED)
+        {
+            return new Damaged2DevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    getInventory(stack.getNbt()),
+                    stack,
+                    null
+            );
+        }
+        else if (DevHealthState.getHealthState(getHP(stack), DEV_CONSTS.MAX_HP) == DevHealthState.ALMOST_INFECTED)
+        {
+            return new Damaged3DevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    getInventory(stack.getNbt()),
+                    stack,
+                    null
+            );
+        }
+        else if (DevHealthState.getHealthState(getHP(stack), DEV_CONSTS.MAX_HP) == DevHealthState.COMPLETELY_INFECTED)
+        {
+            return new Damaged4DevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    getInventory(stack.getNbt()),
+                    stack,
+                    null
+            );
+        }
+        else
+        {
+            return new NormalDevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    getInventory(stack.getNbt()),
+                    stack,
+                    null
+            );
+        }
     }
 
     public Text getInventoryDisplayName() {
         return Text.literal("Dev's Inventory");
+    }
+
+    private static final RawAnimation NORMAL_IDLE_ANIM = RawAnimation.begin().thenLoop("normal");
+    private static final RawAnimation BIT_IDLE_ANIM = RawAnimation.begin().thenLoop("bit");
+    private static final RawAnimation NEAR_IDLE_ANIM = RawAnimation.begin().thenLoop("near");
+    private static final RawAnimation ALMOST_IDLE_ANIM = RawAnimation.begin().thenLoop("almost");
+    private static final RawAnimation COMPLETE_IDLE_ANIM = RawAnimation.begin().thenLoop("complete");
+    private final AnimatableInstanceCache cache = GeckoLibUtil.createInstanceCache(this);
+    private final Supplier<Object> renderProvider = GeoItem.makeRenderer(this);
+
+    // Utilise our own render hook to define our custom renderer
+    @Override
+    public void createRenderer(Consumer<Object> consumer) {
+        consumer.accept(new RenderProvider() {
+            private DevItemRenderer renderer;
+
+            @Override
+            public BuiltinModelItemRenderer getCustomRenderer() {
+                if (this.renderer == null)
+                    this.renderer = new DevItemRenderer();
+
+                return this.renderer;
+            }
+        });
+    }
+
+    @Override
+    public Supplier<Object> getRenderProvider() {
+        return this.renderProvider;
+    }
+
+    // Let's add our animation controller
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+        controllers.add(
+                new AnimationController<>(this, "main", 0, state -> PlayState.STOP)
+                .triggerableAnim("normal", NORMAL_IDLE_ANIM)
+                .triggerableAnim("bit", BIT_IDLE_ANIM)
+                .triggerableAnim("near", NEAR_IDLE_ANIM)
+                .triggerableAnim("almost", ALMOST_IDLE_ANIM)
+                .triggerableAnim("complete", COMPLETE_IDLE_ANIM)
+        );
+    }
+
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {
+        return this.cache;
     }
 }

@@ -22,8 +22,9 @@ public class DevCallC2SPacket
         {
             DevEntity dev = DevItem.GetDevFromPlayer(player);
 
-            if (dev instanceof DevEntity && dev != null && dev.isAlive() && dev.getDevState() != DevState.sitting)
+            if (dev instanceof DevEntity && dev != null && dev.isAlive())
             {
+                if (dev.getDevState() == DevState.sitting) dev.setState(DevState.following);
                 dev.setDevCalled(true);
                 dev.ClearTargets();
             }

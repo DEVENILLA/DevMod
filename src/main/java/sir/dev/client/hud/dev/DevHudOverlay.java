@@ -60,6 +60,8 @@ public class DevHudOverlay implements HudRenderCallback {
             height = client.getWindow().getScaledHeight();
             ArrayList<Identifier> added = new ArrayList<Identifier>();
 
+            if (client.getServer() == null) return;
+
             PlayerEntity player = client.getServer().getPlayerManager().getPlayer(curPlayerUUID);
             if (!player.world.isClient)
             {
@@ -85,23 +87,23 @@ public class DevHudOverlay implements HudRenderCallback {
                                 );
                     }
 
-                    if (dev.IsDevAIcontrolled())
-                    {
-                        added.add(AI_ON);
-                    }
-                    else
-                    {
-                        added.add(AI_OFF);
-                    }
+                    //if (dev.IsDevAIcontrolled())
+                    //{
+                    //    added.add(AI_ON);
+                    //}
+                    //else
+                    //{
+                    //    added.add(AI_OFF);
+                    //}
 
-                    if (dev.getTarget() != null)
-                    {
-                        if (dev.getMainCooldown() <= 0 && canUse(dev, dev.getMainHandStack()))
-                            added.add(MAIN_ATTACK);
-
-                        if (dev.getOffCooldown() <= 0 && canUse(dev, dev.getOffHandStack()))
-                            added.add(OFF_ATTACK);
-                    }
+                    //if (dev.getTarget() != null)
+                    //{
+                    //    if (dev.getMainCooldown() <= 0 && canUse(dev, dev.getMainHandStack()))
+                    //        added.add(MAIN_ATTACK);
+//
+                    //    if (dev.getOffCooldown() <= 0 && canUse(dev, dev.getOffHandStack()))
+                    //        added.add(OFF_ATTACK);
+                    //}
                 }
             }
 

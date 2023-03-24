@@ -34,7 +34,7 @@ public class OnDevOwnerSetsTarget
 
                 List<MobEntity> entities = player.getWorld().getEntitiesByClass(
                         MobEntity.class,
-                        Box.of(player.getPos(), 48, 48, 48),
+                        Box.of(player.getPos(), 256, 256, 256),
                         livingEntity -> {
                             if (livingEntity == dev || livingEntity == dev.getOwner()) return false;
                             if (!IsViableTarget(dev, livingEntity)) return false;

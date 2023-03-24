@@ -9,6 +9,7 @@ import sir.dev.common.entity.ModEntities;
 import sir.dev.common.item.ModItemGroup;
 import sir.dev.common.item.ModItems;
 import sir.dev.common.networking.ModNetworking;
+import sir.dev.common.sound.ModSounds;
 import software.bernie.geckolib.GeckoLib;
 
 public class DevMod implements ModInitializer {
@@ -30,6 +31,7 @@ public class DevMod implements ModInitializer {
 
 		ModScreenHandlers.register();
 
+		ModSounds.register();
 
 		ModNetworking.registerClientToServerPackets();
 

@@ -1,0 +1,18 @@
+{
+  "dev_ambient":
+  {
+    "sounds":
+            [
+              "devmod:dev-jr-ambient-1",
+              "devmod:dev-jr-ambient-2",
+              "devmod:dev-jr-ambient-3",
+              "devmod:dev-jr-ambient-4",
+              "devmod:dev-jr-ambient-5",
+              "devmod:dev-jr-ambient-6",
+              "devmod:dev-jr-ambient-7",
+              "devmod:dev-jr-ambient-8",
+              "devmod:dev-jr-ambient-9",
+              "devmod:dev-jr-ambient-10"
+            ]
+  }
+}

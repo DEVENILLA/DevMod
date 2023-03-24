@@ -3,13 +3,10 @@ package sir.dev.common.entity.dev.goals;
 import java.util.EnumSet;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.LeavesBlock;
+import net.minecraft.client.util.telemetry.TelemetrySender;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.Goal;
-import net.minecraft.entity.ai.pathing.BirdNavigation;
-import net.minecraft.entity.ai.pathing.EntityNavigation;
-import net.minecraft.entity.ai.pathing.LandPathNodeMaker;
-import net.minecraft.entity.ai.pathing.MobNavigation;
-import net.minecraft.entity.ai.pathing.PathNodeType;
+import net.minecraft.entity.ai.pathing.*;
 import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.WorldView;
@@ -17,19 +14,18 @@ import sir.dev.common.entity.dev.DevEntity;
 import sir.dev.common.util.DevState;
 
 public class DevFollowOwnerGoal extends Goal {
-    public static final int TELEPORT_DISTANCE = 12;
-    private static final int HORIZONTAL_RANGE = 2;
-    private static final int HORIZONTAL_VARIATION = 3;
-    private static final int VERTICAL_VARIATION = 1;
     private final TameableEntity tameable;
     private LivingEntity owner;
     private final WorldView world;
     private final double speed;
+    private Path path;
     private final EntityNavigation navigation;
     private int updateCountdownTicks;
+    private double targetX;
+    private double targetY;
+    private double targetZ;
     private final float maxDistance;
     private final float minDistance;
-    private float oldWaterPathfindingPenalty;
     private final boolean leavesAllowed;
     private final boolean activatesWhenCalled;
     private final boolean activatesWhenHasTarget;
@@ -52,6 +48,7 @@ public class DevFollowOwnerGoal extends Goal {
 
     @Override
     public boolean canStart() {
+        long l = this.tameable.world.getTime();
         LivingEntity livingEntity = this.tameable.getOwner();
         DevEntity dev = (DevEntity) this.tameable;
 
@@ -66,6 +63,9 @@ public class DevFollowOwnerGoal extends Goal {
         if (livingEntity == null) {
             return false;
         }
+        if (livingEntity.isDead()) {
+            return false;
+        }
         if (livingEntity.isSpectator()) {
             return false;
         }
@@ -73,6 +73,10 @@ public class DevFollowOwnerGoal extends Goal {
             return false;
         }
         if (this.tameable.squaredDistanceTo(livingEntity) < (double)(this.minDistance * this.minDistance)) {
+            return false;
+        }
+        this.path = this.tameable.getNavigation().findPathTo(livingEntity, 0);
+        if (this.path == null) {
             return false;
         }
         this.owner = livingEntity;
@@ -93,31 +97,81 @@ public class DevFollowOwnerGoal extends Goal {
     @Override
     public void start() {
         this.updateCountdownTicks = 0;
-        this.oldWaterPathfindingPenalty = this.tameable.getPathfindingPenalty(PathNodeType.WATER);
-        this.tameable.setPathfindingPenalty(PathNodeType.WATER, 0.0f);
+        this.tameable.getNavigation().startMovingAlong(this.path, this.speed);
+        DevEntity dev = (DevEntity) this.tameable;
+        this.updateCountdownTicks = 0;
+        if (dev.getUnderwaterTarget() == null)
+            dev.setUnderwaterTarget(this.owner);
+        //this.oldWaterPathfindingPenalty = this.tameable.getPathfindingPenalty(PathNodeType.WATER);
+        //this.tameable.setPathfindingPenalty(PathNodeType.WATER, 0.0f);
     }
 
     @Override
     public void stop() {
         this.owner = null;
+        DevEntity dev = (DevEntity) this.tameable;
+        if (dev.getOwner() != null)
+        {
+            if (dev.getUnderwaterTarget() == dev.getOwner())
+                dev.setUnderwaterTarget(null);
+        }
         this.navigation.stop();
-        this.tameable.setPathfindingPenalty(PathNodeType.WATER, this.oldWaterPathfindingPenalty);
+        //this.tameable.setPathfindingPenalty(PathNodeType.WATER, this.oldWaterPathfindingPenalty);
+    }
+
+    @Override
+    public boolean shouldRunEveryTick() {
+        return true;
+    }
+
+    @Override
+    public boolean canStop() {
+        long l = this.tameable.world.getTime();
+        LivingEntity livingEntity = this.tameable.getOwner();
+        DevEntity dev = (DevEntity) this.tameable;
+
+        if (dev.getDevState() == DevState.sitting)
+        {
+            return true;
+        }
+
+        if (livingEntity == null) {
+            return true;
+        }
+        if (livingEntity.isDead()) {
+            return true;
+        }
+        if (livingEntity.isSpectator()) {
+            return true;
+        }
+        if (this.tameable.isSitting()) {
+            return true;
+        }
+        if (this.tameable.squaredDistanceTo(livingEntity) < (double)(this.minDistance * this.minDistance)) {
+            return true;
+        }
+        this.path = this.tameable.getNavigation().findPathTo(livingEntity, 0);
+        if (this.path == null) {
+            return true;
+        }
+        this.owner = livingEntity;
+        return false;
     }
 
     @Override
     public void tick() {
-        this.tameable.getLookControl().lookAt(this.owner, 10.0f, this.tameable.getMaxLookPitchChange());
-        if (--this.updateCountdownTicks > 0) {
-            return;
-        }
-        this.updateCountdownTicks = this.getTickCount(10);
-        if (this.tameable.isLeashed() || this.tameable.hasVehicle()) {
-            return;
-        }
-        if (this.tameable.squaredDistanceTo(this.owner) >= 144.0) {
+        this.tameable.getLookControl().lookAt(this.owner, 30.0f, 30.0f);
+        DevEntity dev = (DevEntity) this.tameable;
+        if (dev.getUnderwaterTarget() == null)
+            dev.setUnderwaterTarget(this.owner);
+        this.path = this.tameable.getNavigation().findPathTo(this.owner, 0);
+
+        if (this.tameable.squaredDistanceTo(this.owner) >= Math.pow(DevEntity.CHASE_DISTANCE, 2)) {
             this.tryTeleport();
-        } else {
-            this.navigation.startMovingTo(this.owner, this.speed);
+        }
+        else
+        {
+            this.tameable.getNavigation().startMovingTo(this.owner, this.speed);
         }
     }
 
@@ -147,7 +201,7 @@ public class DevFollowOwnerGoal extends Goal {
 
     private boolean canTeleportTo(BlockPos pos) {
         PathNodeType pathNodeType = LandPathNodeMaker.getLandNodeType(this.world, pos.mutableCopy());
-        if (pathNodeType != PathNodeType.WALKABLE) {
+        if (pathNodeType != PathNodeType.WALKABLE && pathNodeType != PathNodeType.WATER) {
             return false;
         }
         BlockState blockState = this.world.getBlockState(pos.down());

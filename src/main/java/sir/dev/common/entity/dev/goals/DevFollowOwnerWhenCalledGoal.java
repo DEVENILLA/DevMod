@@ -24,9 +24,13 @@ public class DevFollowOwnerWhenCalledGoal extends Goal {
     private final double speed;
     private final EntityNavigation navigation;
     private int updateCountdownTicks;
+    private double targetX;
+    private double targetY;
+    private double targetZ;
     private final float maxDistance;
     private final float minDistance;
     private float oldWaterPathfindingPenalty;
+    private Path path;
     private final boolean leavesAllowed;
     private final boolean activatesWhenCalled;
 
@@ -74,6 +78,40 @@ public class DevFollowOwnerWhenCalledGoal extends Goal {
     }
 
     @Override
+    public boolean canStop() {
+        long l = this.tameable.world.getTime();
+        LivingEntity livingEntity = this.tameable.getOwner();
+        DevEntity dev = (DevEntity) this.tameable;
+
+        if (dev.getDevState() == DevState.sitting)
+        {
+            return true;
+        }
+
+        if (livingEntity == null) {
+            return true;
+        }
+        if (livingEntity.isDead()) {
+            return true;
+        }
+        if (livingEntity.isSpectator()) {
+            return true;
+        }
+        if (this.tameable.isSitting()) {
+            return true;
+        }
+        if (this.tameable.squaredDistanceTo(livingEntity) < (double)(this.minDistance * this.minDistance)) {
+            return true;
+        }
+        this.path = this.tameable.getNavigation().findPathTo(livingEntity, 0);
+        if (this.path == null) {
+            return true;
+        }
+        this.owner = livingEntity;
+        return false;
+    }
+
+    @Override
     public boolean shouldContinue() {
         if (this.navigation.isIdle()) {
             return false;
@@ -87,8 +125,11 @@ public class DevFollowOwnerWhenCalledGoal extends Goal {
     @Override
     public void start() {
         this.updateCountdownTicks = 0;
-        this.oldWaterPathfindingPenalty = this.tameable.getPathfindingPenalty(PathNodeType.WATER);
-        this.tameable.setPathfindingPenalty(PathNodeType.WATER, 0.0f);
+        DevEntity dev = (DevEntity) this.tameable;
+        dev.setTarget(null);
+        dev.setUnderwaterTarget(this.owner);
+        //this.oldWaterPathfindingPenalty = this.tameable.getPathfindingPenalty(PathNodeType.WATER);
+        //this.tameable.setPathfindingPenalty(PathNodeType.WATER, 0.0f);
     }
 
     @Override
@@ -96,24 +137,25 @@ public class DevFollowOwnerWhenCalledGoal extends Goal {
         this.owner = null;
         DevEntity dev = (DevEntity) this.tameable;
         dev.setDevCalled(false);
+        if (dev.getOwner() != null)
+        {
+            if (dev.getUnderwaterTarget() == dev.getOwner())
+                dev.setUnderwaterTarget(null);
+        }
         this.navigation.stop();
-        this.tameable.setPathfindingPenalty(PathNodeType.WATER, this.oldWaterPathfindingPenalty);
+        //this.tameable.setPathfindingPenalty(PathNodeType.WATER, this.oldWaterPathfindingPenalty);
     }
 
     @Override
     public void tick() {
-        this.tameable.getLookControl().lookAt(this.owner, 10.0f, this.tameable.getMaxLookPitchChange());
-        if (--this.updateCountdownTicks > 0) {
-            return;
-        }
-        this.updateCountdownTicks = this.getTickCount(10);
-        if (this.tameable.isLeashed() || this.tameable.hasVehicle()) {
-            return;
-        }
-        if (this.tameable.squaredDistanceTo(this.owner) >= 144.0) {
+        this.tameable.getLookControl().lookAt(this.owner, 30.0f, 30.0f);
+        DevEntity dev = (DevEntity) this.tameable;
+        dev.setUnderwaterTarget(this.owner);
+
+        if (this.tameable.squaredDistanceTo(this.owner) >= Math.pow(DevEntity.TARGET_DISTANCE, 2)) {
             this.tryTeleport();
         } else {
-            this.navigation.startMovingTo(this.owner, this.speed);
+            this.tameable.getNavigation().startMovingTo(this.owner, this.speed);
         }
     }
 
@@ -143,7 +185,7 @@ public class DevFollowOwnerWhenCalledGoal extends Goal {
 
     private boolean canTeleportTo(BlockPos pos) {
         PathNodeType pathNodeType = LandPathNodeMaker.getLandNodeType(this.world, pos.mutableCopy());
-        if (pathNodeType != PathNodeType.WALKABLE) {
+        if (pathNodeType != PathNodeType.WALKABLE && pathNodeType != PathNodeType.WATER) {
             return false;
         }
         BlockState blockState = this.world.getBlockState(pos.down());

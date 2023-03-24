@@ -1,5 +1,6 @@
 package sir.dev.client.entity.dev;
 
+import net.minecraft.client.model.ModelPart;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
@@ -12,6 +13,7 @@ import sir.dev.common.util.DevState;
 import software.bernie.geckolib.model.GeoModel;
 
 public class DevEntityModel extends GeoModel<DevEntity> {
+
     @Override
     public Identifier getModelResource(DevEntity dev) {
         Identifier mdl = new Identifier(DevMod.MOD_ID, "geo/entity/dev.geo.json");

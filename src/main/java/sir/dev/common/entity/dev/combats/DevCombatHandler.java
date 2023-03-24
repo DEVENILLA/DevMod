@@ -3,22 +3,26 @@ package sir.dev.common.entity.dev.combats;
 import com.ibm.icu.text.MessagePattern;
 import net.minecraft.block.*;
 import net.minecraft.command.argument.EntityAnchorArgumentType;
+import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.*;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.effect.StatusEffect;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.entity.projectile.ArrowEntity;
+import net.minecraft.entity.projectile.PersistentProjectileEntity;
 import net.minecraft.inventory.Inventory;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.ItemStack;
+import net.minecraft.item.*;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.state.property.Properties;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.JsonSerializableType;
 import net.minecraft.util.math.BlockPos;
@@ -30,11 +34,13 @@ import sir.dev.common.entity.dev.DevEntity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class DevCombatHandler
 {
     public static float OnUseSword(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
     {
+        if (dev.getTarget() != null) {if (dev.distanceTo(dev.getTarget())>5)return 0;}
         DevCombatAction action = new DevCombatAction(dev, MainStack, OtherStack, hand){
             @Override
             public void execute() {
@@ -43,40 +49,56 @@ public class DevCombatHandler
                 serverWorld.spawnParticles(ParticleTypes.SWEEP_ATTACK, dev.getX(), dev.getY(), dev.getZ(), 30, 2, .5, 2, .35);
                 List<LivingEntity> entities = getAffectableEntitiesInARange(serverWorld, dev, dev.getPos(), 4, 1, 4);
 
-                MainStack.use(world, (PlayerEntity) owner, hand);
+                dev.playSound(SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP, 4.0f, (1.0f + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2f) * 0.7f);
+                mainStack.use(world, (PlayerEntity) owner, hand);
+                mainStack.finishUsing(world, dev);
 
                 for (LivingEntity entity : entities)
                 {
                     dev.tryAttack(entity);
                     serverWorld.spawnParticles(ParticleTypes.SWEEP_ATTACK, entity.getX(), entity.getY(), entity.getZ(), 1, 0, 0, 0, 0);
-                    serverWorld.playSound(dev.getX(), dev.getY(), dev.getZ(), SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP, SoundCategory.HOSTILE, 100, 1, true);
                     entity.takeKnockback(3, dev.getX(), dev.getZ());
                 }
             }
         };
         action.execute();
-        return 3;
+        action.SaveInventoryData();
+        return getRandomFloat(1f, 3f);
     }
 
     public static float OnUseAxe(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
     {
+        if (dev.getTarget() != null) {if (dev.distanceTo(dev.getTarget())>5)return 0;}
         DevCombatAction action = new DevCombatAction(dev, MainStack, OtherStack, hand){
             @Override
             public void execute() {
                 super.execute();
-                serverWorld.spawnParticles(ParticleTypes.LARGE_SMOKE, dev.getX(), dev.getY(), dev.getZ(), 30, 2, 1, 2, .35);
+                serverWorld.spawnParticles(ParticleTypes.LARGE_SMOKE, dev.getX(), dev.getY(), dev.getZ(), 60, 2, 1, 2, .35);
+                serverWorld.spawnParticles(ParticleTypes.CAMPFIRE_COSY_SMOKE, dev.getX(), dev.getY(), dev.getZ(), 60, 2, 1, 2, .35);
                 List<LivingEntity> entities = getAffectableEntitiesInARange(serverWorld, dev, dev.getPos(), 4, 1, 4);
-                dev.triggerAnim("other", "leap");
+                dev.triggerAnim("other", "attack");
                 for (LivingEntity entity : entities)
                 {
                     dev.tryAttack(entity);
                     serverWorld.spawnParticles(ParticleTypes.SWEEP_ATTACK, entity.getX(), entity.getY(), entity.getZ(), 1, 0, 0, 0, 0);
-                    entity.addVelocity(0, 1, 0);
+                    entity.addVelocity(0, .1, 0);
+                    entity.addStatusEffect(new StatusEffectInstance(StatusEffects.LEVITATION, (int)(1.5*20), 0));
+                    entity.addStatusEffect(new StatusEffectInstance(StatusEffects.BLINDNESS, (int)(1.5*20), 0));
+                    entity.addStatusEffect(new StatusEffectInstance(StatusEffects.DARKNESS, (int)(1.5*20), 0));
+                    entity.setAttacker(null);
+                    entity.setAttacking(null);
+                    if (entity instanceof MobEntity mob) { mob.setTarget(null); }
+                    if (entity instanceof TameableEntity tamed && tamed.isTamed() && tamed.getOwner() != null)
+                    {
+                        tamed.getOwner().setAttacking(null);
+                        tamed.getOwner().setAttacker(null);
+                    }
                 }
 
-                MainStack.use(world, (PlayerEntity) owner, hand);
+                mainStack.use(world, (PlayerEntity) owner, hand);
+                mainStack.finishUsing(world, dev);
 
-                serverWorld.playSound(dev.getX(), dev.getY(), dev.getZ(), SoundEvents.BLOCK_ANVIL_HIT, SoundCategory.HOSTILE, 100, 1, true);
+                dev.playSound(SoundEvents.BLOCK_ANVIL_HIT, 4.0f, (1.0f + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2f) * 0.7f);
 
                 List<BlockState> blocks = new ArrayList<>();
                 List<BlockPos> blockPositions = new ArrayList<>();
@@ -84,32 +106,44 @@ public class DevCombatHandler
                 {
                     for (int z = -2; z <= 4; z++)
                     {
-                        BlockPos pos = new BlockPos(
-                                dev.getX()-x,
-                                dev.getY()-1,
-                                dev.getZ()-z
-                        );
-                        blockPositions.add(pos);
-                        Block block = serverWorld.getBlockState(pos).getBlock();
-                        if (block != Blocks.BEDROCK && block != Blocks.END_PORTAL && block != Blocks.END_GATEWAY)
+                        for (int y = -1; y <= 0; y++)
                         {
-                            blocks.add(serverWorld.getBlockState(pos));
+                            if (!(dev.getY()-y <= -64))
+                            {
+                                if (getRandomFloat(0, 1) > .89f)
+                                {
+                                    BlockPos pos = new BlockPos(
+                                            dev.getX()+x,
+                                            dev.getY()+y,
+                                            dev.getZ()+z
+                                    );
+                                    Block block = serverWorld.getBlockState(pos).getBlock();
+                                    if (
+                                            block != Blocks.BEDROCK &&
+                                                    block != Blocks.END_PORTAL &&
+                                                    block != Blocks.END_PORTAL_FRAME &&
+                                                    block != Blocks.END_GATEWAY &&
+                                                    block != Blocks.OBSIDIAN &&
+                                                    block != Blocks.NETHER_PORTAL
+                                    )
+                                    {
+                                        blockPositions.add(pos);
+                                        blocks.add(serverWorld.getBlockState(pos));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
                 for (int i = 0; i < blocks.size(); i++)
                 {
-                    BlockPos pos = new BlockPos(blockPositions.get(i).getX(), blockPositions.get(i).getY(), blockPositions.get(i).getZ());
-
-                    FallingBlockEntity falling = FallingBlockEntity.spawnFromBlock(serverWorld, pos, blocks.get(i));
-                    falling.setPos(pos.getX(), pos.getY()+.5, pos.getZ());
-                    falling.addVelocity(0, (Random.create().nextBetween(50, 120) / 100),0);
-                    world.spawnEntity(falling);
+                    BlockState block = blocks.get(i);
                 }
             }
         };
         action.execute();
-        return 4;
+        action.SaveInventoryData();
+        return getRandomFloat(2f, 4f);
     }
 
     public static float OnUseTrident(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
@@ -120,9 +154,12 @@ public class DevCombatHandler
             public void execute() {
                 super.execute();
                 serverWorld.spawnParticles(ParticleTypes.CLOUD, dev.getX(), dev.getY(), dev.getZ(), 10, .5, .5, .5, .45);
+
+                dev.playSound(SoundEvents.ITEM_TRIDENT_THROW, 4.0f, (1.0f + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2f) * 0.7f);
                 dev.triggerAnim("other", "leap");
 
-                MainStack.use(world, (PlayerEntity) owner, hand);
+                mainStack.use(world, (PlayerEntity) owner, hand);
+                mainStack.finishUsing(world, dev);
 
                 double xDir = target.getX() - dev.getX();
                 double yDir = target.getY() - dev.getY();
@@ -133,37 +170,185 @@ public class DevCombatHandler
                                 yDir/magnitude * 2,
                                 zDir/magnitude * 2);
 
-                dev.setVelocity(Velocity);
+                dev.addVelocity(Velocity);
                 dev.lookAt(EntityAnchorArgumentType.EntityAnchor.FEET, target.getPos());
                 dev.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, target.getPos());
             }
         };
         action.execute();
-        return 3;
+        action.SaveInventoryData();
+        return getRandomFloat(.75f, 2.2f);
     }
 
     public static float OnUseShield(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
     {
+        if (dev.getTarget() != null) {if (dev.distanceTo(dev.getTarget())>5)return 0;}
+        DevCombatAction action = new DevCombatAction(dev, MainStack, OtherStack, hand){
+            @Override
+            public void execute() {
+                super.execute();
+                dev.triggerAnim("other", "leap");
+                serverWorld.spawnParticles(ParticleTypes.EXPLOSION, dev.getX(), dev.getY(), dev.getZ(), 30, 3, 3, 3, .35);
 
-        return 3;
+                dev.playSound(SoundEvents.ITEM_SHIELD_BLOCK, 4.0f, (1.0f + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2f) * 0.7f);
+                List<LivingEntity> entities = getAffectableEntitiesInARange(serverWorld, dev, dev.getPos(), 4, 1, 4);
+
+                mainStack.use(world, (PlayerEntity) owner, hand);
+                mainStack.finishUsing(world, dev);
+
+                dev.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, (int)(1*20), 0));
+                owner.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, (int)(1*20), 0));
+
+                for (LivingEntity entity : entities)
+                {
+                    double xDir = entity.getX() - dev.getX();
+                    double yDir = entity.getY() - dev.getY();
+                    double zDir = entity.getZ() - dev.getZ();
+                    double magnitude = Math.sqrt(Math.pow(xDir, 2)+Math.pow(yDir, 2)+Math.pow(zDir, 2));
+                    Vec3d Velocity = new Vec3d
+                            (xDir/magnitude * -2,
+                                    yDir/magnitude * -2,
+                                    zDir/magnitude * -2);
+
+                    entity.addVelocity(Velocity);
+                    entity.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, (int)(3*20), 0));
+                }
+            }
+        };
+        action.execute();
+        action.SaveInventoryData();
+        return getRandomFloat(1.75f, 3.5f);
     }
 
     public static float OnUseTNT(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
     {
+        if (dev.getTarget() != null) {if (dev.distanceTo(dev.getTarget())>5)return 0;}
+        DevCombatAction action = new DevCombatAction(dev, MainStack, OtherStack, hand){
+            @Override
+            public void execute() {
+                super.execute();
+                if (dev.distanceTo(target) > 3.8)
+                dev.triggerAnim("other", "backflip");
+                serverWorld.spawnParticles(ParticleTypes.EXPLOSION, dev.getX(), dev.getY(), dev.getZ(), 30, 2, .5, 2, .35);
+                dev.playSound(SoundEvents.ENTITY_GENERIC_EXPLODE, 4.0f, (1.0f + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2f) * 0.7f);
+                List<LivingEntity> entities = getAffectableEntitiesInARange(serverWorld, dev, dev.getPos(), 4, 1, 4);
 
-        return 3;
+                mainStack.decrement(1);
+                DamageSource dmg = DamageSource.mob(dev);
+
+                for (LivingEntity entity : entities)
+                {
+                    entity.damage(dmg, Random.create().nextBetween(20, 60));
+                    serverWorld.createExplosion(dev, entity.getX(), entity.getY(), dev.getZ(), 1, World.ExplosionSourceType.MOB);
+                    double xDir = entity.getX() - dev.getX();
+                    double yDir = entity.getY() - dev.getY();
+                    double zDir = entity.getZ() - dev.getZ();
+                    double magnitude = Math.sqrt(Math.pow(xDir, 2)+Math.pow(yDir, 2)+Math.pow(zDir, 2));
+                    Vec3d Velocity = new Vec3d
+                            (xDir/magnitude * -2,
+                                    yDir/magnitude * -2,
+                                    zDir/magnitude * -2);
+
+                    entity.addVelocity(Velocity);
+                }
+            }
+        };
+        action.execute();
+        action.SaveInventoryData();
+        return getRandomFloat(1.5f, 3.75f);
     }
 
     public static float OnUseBow(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
     {
+        DevCombatAction action = new DevCombatAction(dev, MainStack, OtherStack, hand){
+            @Override
+            public void execute() {
+                super.execute();
+                int arrowStack = -62672571;
+                for (int i = 0; i<inventory.size(); i++)
+                {
+                    if (inventory.getStack(i).getItem() instanceof ArrowItem)
+                    {
+                        arrowStack = i;
+                        break;
+                    }
+                }
+                if (arrowStack != -62672571)
+                {
 
-        return 3;
+                    dev.playSound(SoundEvents.ENTITY_ARROW_SHOOT, 4.0f, (1.0f + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2f) * 0.7f);
+
+                    mainStack.use(world, (PlayerEntity) owner, hand);
+                    mainStack.finishUsing(world, dev);
+
+                    this.shootArrow(arrowStack);
+
+                    inventory.getStack(arrowStack).decrement(1);
+                    mainStack.damage(Random.create().nextBetween(1, 9), dev, new Consumer<DevEntity>() {
+                        @Override
+                        public void accept(DevEntity devEntity) {
+
+                        }
+                    });
+                }
+                else
+                {
+                    owner.sendMessage(Text.literal("your dev doesn't have arrows"));
+                }
+            }
+        };
+        action.execute();
+        action.SaveInventoryData();
+        return getRandomFloat(2f, 3f);
     }
 
     public static float OnUseCrossbow(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
     {
+        
+        DevCombatAction action = new DevCombatAction(dev, MainStack, OtherStack, hand){
+            @Override
+            public void execute() {
+                super.execute();
+                int arrowStack = -62672571;
+                for (int i = 0; i<inventory.size(); i++)
+                {
+                    if (inventory.getStack(i).getItem() instanceof ArrowItem)
+                    {
+                        arrowStack = i;
+                        break;
+                    }
+                }
+                if (arrowStack != -62672571) {
 
-        return 3;
+                    dev.playSound( SoundEvents.ENTITY_ARROW_SHOOT, 4.0f, (1.0f + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2f) * 0.7f);
+
+                    mainStack.use(world, (PlayerEntity) owner, hand);
+                    mainStack.finishUsing(world, dev);
+
+                    for (int i = 0; i < 3; i++)
+                    {
+                        PersistentProjectileEntity arrow = this.shootArrow(arrowStack);
+                        arrow.setPunch(3);
+                        arrow.setPierceLevel((byte)3);
+                    }
+
+                    inventory.getStack(arrowStack).decrement(1);
+                    mainStack.damage(Random.create().nextBetween(1, 9), dev, new Consumer<DevEntity>() {
+                        @Override
+                        public void accept(DevEntity devEntity) {
+
+                        }
+                    });
+                }
+                else
+                {
+                    owner.sendMessage(Text.literal("your dev doesn't have arrows"));
+                }
+            }
+        };
+        action.execute();
+        action.SaveInventoryData();
+        return getRandomFloat(.25f, 1.2f);
     }
 
     public static List<LivingEntity> getAffectableEntitiesInARange(ServerWorld world, DevEntity dev, Vec3d anchorPos, double sizeX, double sizeY, double sizeZ)
@@ -178,5 +363,11 @@ public class DevCombatHandler
                 }
         );
         return entities;
+    }
+
+    public static float getRandomFloat(float val1, float val2)
+    {
+        int accuracy = 100000;
+        return Random.create().nextBetween((int)(val1*accuracy), (int)(val2*accuracy))/accuracy;
     }
 }

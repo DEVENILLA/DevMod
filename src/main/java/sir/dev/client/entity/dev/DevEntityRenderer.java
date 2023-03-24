@@ -56,8 +56,6 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
 
         this.shadowRadius = .3f;
 
-        this.addRenderLayer(new DevEntityLayer(this));
-
         this.addRenderLayer(new BlockAndItemGeoLayer<>(this)
         {
             @Nullable
@@ -87,6 +85,7 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
 
                 if (stack == DevEntityRenderer.this.mainHandItem) {
                     poseStack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(-90f));
+                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-90));
                     poseStack.translate(0, 0, 0);
 
                     poseStack.scale(1f, 1f, 1f);
@@ -99,11 +98,12 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
                 else if (stack == DevEntityRenderer.this.offhandItem) {
                     poseStack.translate(0, 0, 0);
                     poseStack.multiply(RotationAxis.POSITIVE_X.rotationDegrees(-90f));
+                    poseStack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(90));
 
                     poseStack.scale(1f, 1f, 1f);
                     if (stack.getItem() instanceof ShieldItem){
-                        poseStack.translate(0, 0, .1);
                         poseStack.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(180));
+                        poseStack.translate(0, -0.1, .1);
                         poseStack.scale(.4f, .4f, .4f);
                     }
                 }

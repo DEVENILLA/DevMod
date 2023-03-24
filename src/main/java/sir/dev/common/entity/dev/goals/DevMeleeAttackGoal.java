@@ -6,6 +6,8 @@ import net.minecraft.entity.ai.goal.Goal;
 import net.minecraft.entity.ai.pathing.Path;
 import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.BowItem;
+import net.minecraft.item.CrossbowItem;
 import net.minecraft.predicate.entity.EntityPredicates;
 import net.minecraft.util.Hand;
 import sir.dev.common.entity.dev.DevEntity;
@@ -76,6 +78,10 @@ public class DevMeleeAttackGoal
         if (!this.mob.isInWalkTargetRange(livingEntity.getBlockPos())) {
             return false;
         }
+        Path p = this.mob.getNavigation().findPathTo(livingEntity, 0);
+        if (p == null && !this.mob.getVisibilityCache().canSee(livingEntity)) {
+            return false;
+        }
         return !(livingEntity instanceof PlayerEntity) || !livingEntity.isSpectator() && !((PlayerEntity)livingEntity).isCreative();
     }
 
@@ -83,6 +89,7 @@ public class DevMeleeAttackGoal
     public void start() {
         this.mob.getNavigation().startMovingAlong(this.path, this.speed);
         this.mob.setAttacking(true);
+        DevEntity dev = (DevEntity) this.mob;
         this.updateCountdownTicks = 0;
         this.cooldown = 0;
     }
@@ -90,6 +97,7 @@ public class DevMeleeAttackGoal
     @Override
     public void stop() {
 
+        DevEntity dev = (DevEntity) this.mob;
         LivingEntity livingEntity = this.mob.getTarget();
         if (!EntityPredicates.EXCEPT_CREATIVE_OR_SPECTATOR.test(livingEntity)) {
             this.mob.setTarget(null);
@@ -109,26 +117,59 @@ public class DevMeleeAttackGoal
         if (livingEntity == null) {
             return;
         }
+        DevEntity dev = (DevEntity) this.mob;
+        if (!dev.IsDevCalled())
+            dev.setUnderwaterTarget(livingEntity);
         this.mob.getLookControl().lookAt(livingEntity, 30.0f, 30.0f);
-        double d = this.mob.getSquaredDistanceToAttackPosOf(livingEntity);
-        this.updateCountdownTicks = Math.max(this.updateCountdownTicks - 1, 0);
-        if ((this.pauseWhenMobIdle || this.mob.getVisibilityCache().canSee(livingEntity)) && this.updateCountdownTicks <= 0 && (this.targetX == 0.0 && this.targetY == 0.0 && this.targetZ == 0.0 || livingEntity.squaredDistanceTo(this.targetX, this.targetY, this.targetZ) >= 1.0 || this.mob.getRandom().nextFloat() < 0.05f)) {
-            this.targetX = livingEntity.getX();
-            this.targetY = livingEntity.getY();
-            this.targetZ = livingEntity.getZ();
-            this.updateCountdownTicks = 4 + this.mob.getRandom().nextInt(7);
-            if (d > 1024.0) {
-                this.updateCountdownTicks += 10;
-            } else if (d > 256.0) {
-                this.updateCountdownTicks += 5;
+        if
+        (
+                (dev.getMainHandStack().getItem() instanceof BowItem || dev.getMainHandStack().getItem() instanceof CrossbowItem) &&
+                (dev.getOffHandStack().getItem() instanceof BowItem || dev.getOffHandStack().getItem() instanceof CrossbowItem) &&
+                this.mob.getVisibilityCache().canSee(livingEntity)
+        )
+        {
+            double d = this.mob.getSquaredDistanceToAttackPosOf(livingEntity);
+            this.updateCountdownTicks = Math.max(this.updateCountdownTicks - 1, 0);
+            if ((this.pauseWhenMobIdle || this.mob.getVisibilityCache().canSee(livingEntity)) && this.updateCountdownTicks <= 0 && livingEntity.squaredDistanceTo(this.targetX, this.targetY, this.targetZ) >= (12^2) || this.mob.getRandom().nextFloat() < 0.05f) {
+                this.targetX = livingEntity.getX();
+                this.targetY = livingEntity.getY();
+                this.targetZ = livingEntity.getZ();
+                this.updateCountdownTicks = 4 + this.mob.getRandom().nextInt(7);
+                if (d > 1024.0) {
+                    this.updateCountdownTicks += 10;
+                } else if (d > 256.0) {
+                    this.updateCountdownTicks += 5;
+                }
+                if (!this.mob.getNavigation().startMovingTo(livingEntity, this.speed)) {
+                    this.updateCountdownTicks += 15;
+                }
+                this.updateCountdownTicks = this.getTickCount(this.updateCountdownTicks);
             }
-            if (!this.mob.getNavigation().startMovingTo(livingEntity, this.speed)) {
-                this.updateCountdownTicks += 15;
-            }
-            this.updateCountdownTicks = this.getTickCount(this.updateCountdownTicks);
+            this.cooldown = Math.max(this.cooldown - 1, 0);
+            this.attack(livingEntity, d);
         }
-        this.cooldown = Math.max(this.cooldown - 1, 0);
-        this.attack(livingEntity, d);
+        else
+        {
+            double d = this.mob.getSquaredDistanceToAttackPosOf(livingEntity);
+            this.updateCountdownTicks = Math.max(this.updateCountdownTicks - 1, 0);
+            if ((this.pauseWhenMobIdle || this.mob.getVisibilityCache().canSee(livingEntity)) && this.updateCountdownTicks <= 0 && (this.targetX == 0.0 && this.targetY == 0.0 && this.targetZ == 0.0 || livingEntity.squaredDistanceTo(this.targetX, this.targetY, this.targetZ) >= 1.0 || this.mob.getRandom().nextFloat() < 0.05f)) {
+                this.targetX = livingEntity.getX();
+                this.targetY = livingEntity.getY();
+                this.targetZ = livingEntity.getZ();
+                this.updateCountdownTicks = 4 + this.mob.getRandom().nextInt(7);
+                if (d > 1024.0) {
+                    this.updateCountdownTicks += 10;
+                } else if (d > 256.0) {
+                    this.updateCountdownTicks += 5;
+                }
+                if (!this.mob.getNavigation().startMovingTo(livingEntity, this.speed)) {
+                    this.updateCountdownTicks += 15;
+                }
+                this.updateCountdownTicks = this.getTickCount(this.updateCountdownTicks);
+            }
+            this.cooldown = Math.max(this.cooldown - 1, 0);
+            this.attack(livingEntity, d);
+        }
     }
 
     protected void attack(LivingEntity target, double squaredDistance) {

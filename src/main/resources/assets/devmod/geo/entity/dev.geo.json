@@ -49,7 +49,11 @@
 				{
 					"name": "lefthand",
 					"parent": "larm",
-					"pivot": [5.5, 4.75, 0.5]
+					"pivot": [5.5, 4.75, 0.5],
+					"rotation": [0, 0, 45],
+					"cubes": [
+						{"origin": [5.5, 4.75, 0.5], "size": [0, 0, 0], "uv": [0, 0]}
+					]
 				},
 				{
 					"name": "rarm",
@@ -63,7 +67,11 @@
 				{
 					"name": "righthand",
 					"parent": "rarm",
-					"pivot": [-5.5, 4.75, 0.5]
+					"pivot": [-5.5, 4.75, 0.5],
+					"rotation": [0, 0, -45],
+					"cubes": [
+						{"origin": [-5.5, 4.75, 0.5], "size": [0, 0, 0], "uv": [0, 0]}
+					]
 				},
 				{
 					"name": "head",

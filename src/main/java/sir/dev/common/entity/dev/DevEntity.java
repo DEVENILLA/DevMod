@@ -2,11 +2,13 @@ package sir.dev.common.entity.dev;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.block.TntBlock;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LightningEntity;
-import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.*;
 import net.minecraft.entity.ai.TargetPredicate;
+import net.minecraft.entity.ai.control.MoveControl;
+import net.minecraft.entity.ai.pathing.EntityNavigation;
+import net.minecraft.entity.ai.pathing.Path;
+import net.minecraft.entity.ai.pathing.PathNodeType;
+import net.minecraft.entity.ai.pathing.SwimNavigation;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
@@ -15,6 +17,7 @@ import net.minecraft.entity.data.TrackedData;
 import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.entity.mob.FlyingEntity;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.PathAwareEntity;
 import net.minecraft.entity.passive.PassiveEntity;
@@ -28,6 +31,7 @@ import net.minecraft.item.*;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.screen.NamedScreenHandlerFactory;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.server.ServerConfigHandler;
@@ -42,16 +46,21 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.ItemScatterer;
 import net.minecraft.util.collection.DefaultedList;
 import net.minecraft.util.math.*;
+import net.minecraft.util.math.random.Random;
+import net.minecraft.world.TeleportTarget;
 import net.minecraft.world.World;
+import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.event.GameEvent;
 import org.jetbrains.annotations.Nullable;
+import sir.dev.DevMod;
 import sir.dev.client.hud.dev.DevHudOverlay;
-import sir.dev.client.screen.dev.DevScreenHandler;
+import sir.dev.client.screen.dev.*;
 import sir.dev.common.entity.dev.combats.DevCombatHandler;
 import sir.dev.common.entity.dev.goals.*;
 import sir.dev.common.item.ModItems;
 import sir.dev.common.item.dev.DevItem;
 import sir.dev.common.networking.packets.OnDevOwnerSetsTarget;
+import sir.dev.common.sound.ModSounds;
 import sir.dev.common.util.DEV_CONSTS;
 import sir.dev.common.util.DevHealthState;
 import sir.dev.common.util.DevState;
@@ -64,12 +73,15 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 public class DevEntity extends TameableEntity implements GeoEntity {
 
     private static final TrackedData<ItemStack> TrackedMainHandItem = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.ITEM_STACK);
     private static final TrackedData<ItemStack> TrackedOffHandItem = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.ITEM_STACK);
     private static final TrackedData<String> TrackedDevState = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.STRING);
+    private static final TrackedData<String> TrackedDevHealthState = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.STRING);
+    private static final TrackedData<Integer> TrackedRageState = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.INTEGER);
     private static final TrackedData<Boolean> TrackedDevCalled = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
     private static final TrackedData<Boolean> TrackedDevAI = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
     private static final TrackedData<Integer> TrackedMainCooldown = DataTracker.registerData(DevEntity.class, TrackedDataHandlerRegistry.INTEGER);
@@ -80,9 +92,21 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     public static final float CHASE_DISTANCE = 64;
     public static final float TARGET_DISTANCE = 20;
 
+    public LivingEntity waterTarget = null;
+    public BlockPos respawnPos = null;
+    public List<Chunk> curChunks;
+    public Chunk curChunk;
+
     public DevEntity(EntityType<? extends TameableEntity> entityType, World world) {
         super(entityType, world);
         experiencePoints = 400;
+        this.stepHeight = 1.0f;
+        this.moveControl = new DevMoveControl(this);
+        this.setPathfindingPenalty(PathNodeType.WATER, 0.0f);
+        this.landNav = this.navigation;
+        this.waterNav = new SwimNavigation(this, world);
+        curChunks = List.of();
+        curChunk = null;
         setPersistent();
     }
 
@@ -108,7 +132,6 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         this.goalSelector.add(5, new DevLookAroundGoal((MobEntity) this));
         this.goalSelector.add(6, new DevWanderAroundGoal((PathAwareEntity) this, 1f));
         this.goalSelector.add(7, new DevLookAtEntityGoal((MobEntity) this, PlayerEntity.class, 5));
-        this.goalSelector.add(8, new DevSwimAroundGoal((PathAwareEntity) this, 1.0, 1));
     }
 
     @Override
@@ -116,6 +139,8 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         this.dataTracker.startTracking(TrackedMainHandItem, ItemStack.EMPTY);
         this.dataTracker.startTracking(TrackedOffHandItem, ItemStack.EMPTY);
         this.dataTracker.startTracking(TrackedDevState, DevState.getDefault().name());
+        this.dataTracker.startTracking(TrackedDevHealthState, DevHealthState.NORMAL.name());
+        this.dataTracker.startTracking(TrackedRageState, 0);
         this.dataTracker.startTracking(TrackedDevCalled, false);
         this.dataTracker.startTracking(TrackedDevOwnerLookingAtEntity, false);
         this.dataTracker.startTracking(TrackedDevAI, true);
@@ -128,15 +153,14 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     @Override
     public void tick() {
         super.tick();
-        this.world.getWorldChunk(this.getBlockPos()).setLoadedToWorld(true);
-        this.world.getWorldChunk(this.getBlockPos()).loadEntities();
-        this.world.getWorldChunk(this.getBlockPos()).setShouldRenderOnUpdate(true);
 
         this.setHandEffectAnimTickrate(this.getHandEffectAnimTickrate()+1);
 
+        this.dataTracker.set(TrackedDevHealthState, DevHealthState.getHealthState(this.getHealth(), DEV_CONSTS.MAX_HP).name());
         if (!this.world.isClient())
         {
             this.HandleStatesWhenTick();
+            this.HandleWaterTarget();
             this.dataTracker.set(TrackedMainHandItem, this.getInventory().getStack(9));
             this.dataTracker.set(TrackedOffHandItem, this.getInventory().getStack(10));
             this.dataTracker.set(TrackedDevState, this.getState().name());
@@ -144,6 +168,9 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
             this.dataTracker.set(TrackedMainCooldown, this.dataTracker.get(TrackedMainCooldown)-1);
             this.dataTracker.set(TrackedOffCooldown, this.dataTracker.get(TrackedOffCooldown)-1);
+            this.dataTracker.set(TrackedRageState, this.dataTracker.get(TrackedRageState)-1);
+
+            if (this.IsDevCalled() && this.getDevState() == DevState.sitting) this.setState(DevState.following);
 
             if (IsDevAIcontrolled())
             {
@@ -177,21 +204,40 @@ public class DevEntity extends TameableEntity implements GeoEntity {
             else
             {
                 DevItem.SaveDevToPlayer(((PlayerEntity)this.getOwner()), this);
+                if (this.getOwner().world instanceof ServerWorld ownerWorld && this.world instanceof ServerWorld devWorld)
+                {
+                    if (ownerWorld.getDimension() != devWorld.getDimension())
+                    {
+                        this.moveToWorld(ownerWorld);
+                        this.setPosition(this.getOwner().getPos());
+                    }
+                }
             }
 
             HandleTargeting();
+
+            HandlePickingUp();
         }
     }
 
     @Override
-    public void checkDespawn() {
-        this.world.getWorldChunk(this.getBlockPos()).setLoadedToWorld(true);
-        this.world.getWorldChunk(this.getBlockPos()).loadEntities();
+    protected void mobTick() {
+        super.mobTick();
         this.despawnCounter = 0;
+        this.landNav.tick();
+        this.waterNav.tick();
     }
+
     @Override
-    public boolean canImmediatelyDespawn(double distanceSquared) {
-        return false;
+    public void baseTick() {
+        attractItems();
+        this.HandleLoading();
+        super.baseTick();
+    }
+
+    @Override
+    public void checkDespawn() {
+        this.despawnCounter = 0;
     }
 
     public void HandleTargeting()
@@ -233,8 +279,15 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         }
     }
 
+    @Override
+    public void takeKnockback(double strength, double x, double z) {
+    }
+
     public boolean IsViableTarget(LivingEntity entity, boolean noTargetCheck)
     {
+        if (entity == null) return false;
+        if (entity.isDead()) return false;
+
         DevEntity dev = DevEntity.this;
         if (dev.getDevState() != DevState.defending || dev.IsDevCalled() == true || dev.getOwner() == null)
         {
@@ -243,9 +296,19 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
         if (entity == null || entity.isDead()) return false;
 
-        if (DEV_CONSTS.GetDistance(entity.getPos(), dev.getPos()) >= CHASE_DISTANCE*2)
+        if (entity.hasNoGravity() || entity instanceof FlyingEntity)
         {
-            return false;
+            if (DEV_CONSTS.GetDistance(entity.getPos(), dev.getPos()) >= CHASE_DISTANCE*5)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            if (DEV_CONSTS.GetDistance(entity.getPos(), dev.getPos()) >= CHASE_DISTANCE*2)
+            {
+                return false;
+            }
         }
 
         if (entity == dev)
@@ -281,6 +344,11 @@ public class DevEntity extends TameableEntity implements GeoEntity {
             return false;
         }
 
+        Path p = this.getNavigation().findPathTo(entity, 0);
+        if (p == null && !this.getVisibilityCache().canSee(entity)) {
+            return false;
+        }
+
         return true;
     }
 
@@ -301,7 +369,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
                         List<MobEntity> entities = world.getEntitiesByClass(
                                 MobEntity.class,
-                                Box.of(player.getPos(), 48, 48, 48),
+                                Box.of(player.getPos(), 256, 256, 256),
                                 livingEntity -> {
                                     if (livingEntity != null)
                                     {
@@ -408,7 +476,6 @@ public class DevEntity extends TameableEntity implements GeoEntity {
         }
     }
 
-
     @Override
     public void onAttacking(Entity target) {
         super.onAttacking(target);
@@ -419,6 +486,17 @@ public class DevEntity extends TameableEntity implements GeoEntity {
             this.HurtUsingItem(this.getMainHandStack(), (LivingEntity) target);
             this.HurtUsingItem(this.getOffHandStack(), (LivingEntity) target);
             this.HandleStatesWhenAttackEntity((LivingEntity) target);
+
+            if (this.IsDevCharged())
+            {
+                LightningEntity lighting = new LightningEntity(EntityType.LIGHTNING_BOLT, world);
+                lighting.setPos(target.getX(), target.getY(), target.getZ());
+                lighting.setCosmetic(true);
+                lighting.setOnFire(true);
+                target.damage(DamageSource.mob(this), Random.create().nextBetween(10, 35));
+                world.spawnEntity(lighting);
+                this.ModifyDevCharged(-50);
+            }
         }
     }
 
@@ -426,20 +504,15 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     {
         if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.NEAR_INFECTED)
         {
-            target.takeKnockback(1, this.getX(), this.getZ());
+
         }
         if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.ALMOST_INFECTED)
         {
-            this.world.createExplosion(this, target.getX(), target.getY(), target.getZ(), 0, World.ExplosionSourceType.MOB);
-            target.takeKnockback(2, this.getX(), this.getZ());
+
         }
         else if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.COMPLETELY_INFECTED)
         {
-            this.world.createExplosion(this, target.getX(), target.getY(), target.getZ(), 1, World.ExplosionSourceType.MOB);
-            Entity lightning = new LightningEntity(EntityType.LIGHTNING_BOLT, this.world);
-            lightning.setPos(target.getX(), target.getY(), target.getZ());
-            this.world.spawnEntity(lightning);
-            target.takeKnockback(3, this.getX(), this.getZ());
+
         }
     }
 
@@ -447,24 +520,30 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     {
         if (this.world instanceof ServerWorld serverWorld)
         {
+            if (this.IsDevCharged())
+            {
+                serverWorld.spawnParticles(ParticleTypes.ELECTRIC_SPARK, this.getX(), this.getY(), this.getZ(), 5, .5, .5, .5, .2);
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.GLOWING, 1*20, 0));
+            }
+
             if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.NEAR_INFECTED)
             {
                 serverWorld.spawnParticles(ParticleTypes.PORTAL, this.getX(), this.getY(), this.getZ(), 5, .5, .5, .5, .2);
-                this.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 5*20, 1));
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 5*20, 0));
             }
             if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.ALMOST_INFECTED)
             {
                 serverWorld.spawnParticles(ParticleTypes.PORTAL, this.getX(), this.getY(), this.getZ(), 10, .5, .5, .5, .2);
-                this.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 5*20, 2));
-                this.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 5*20, 2));
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 5*20, 1));
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 5*20, 0));
             }
             else if (DevHealthState.getHealthState(getHealth(), (float)DEV_CONSTS.MAX_HP) == DevHealthState.COMPLETELY_INFECTED)
             {
                 serverWorld.spawnParticles(ParticleTypes.PORTAL, this.getX(), this.getY(), this.getZ(), 10, .5, .5, .5, .2);
-                serverWorld.spawnParticles(ParticleTypes.REVERSE_PORTAL, this.getX(), this.getY(), this.getZ(), 10, 2, 2, 2, .2);
-                this.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 5*20, 3));
-                this.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 5*20, 3));
-                this.addStatusEffect(new StatusEffectInstance(StatusEffects.REGENERATION, 5*20, 3));
+                serverWorld.spawnParticles(ParticleTypes.REVERSE_PORTAL, this.getX(), this.getY(), this.getZ(), 10, .6, .6, .6, .2);
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, 5*20, 2));
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.SPEED, 5*20, 1));
+                this.addStatusEffect(new StatusEffectInstance(StatusEffects.STRENGTH, 5*20, 1));
             }
         }
     }
@@ -522,10 +601,17 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     }
 
     @Override
+    public void onStruckByLightning(ServerWorld world, LightningEntity lightning) {
+        this.ModifyDevCharged(6 * 20);
+        super.onStruckByLightning(world, lightning);
+    }
+
+    @Override
     protected void applyDamage(DamageSource source, float amount) {
         if (this.isInvulnerableTo(source)) {
             return;
         }
+        if (source.isFire() || source.isExplosive()) return;
         amount = this.applyArmorToDamage(source, amount);
         float f = amount = this.modifyAppliedDamage(source, amount);
         amount = Math.max(amount - this.getAbsorptionAmount(), 0.0f);
@@ -538,11 +624,31 @@ public class DevEntity extends TameableEntity implements GeoEntity {
             return;
         }
         float h = this.getHealth();
+        if (this.getMainHandStack().getItem() instanceof ShieldItem && Random.create().nextBetween(1, 100) > Random.create().nextBetween(50, 80))
+        {
+            this.getMainHandStack().damage((int) amount, this, new Consumer<DevEntity>() {
+                @Override
+                public void accept(DevEntity devEntity) {
+
+                }
+            });
+            return;
+        }
+        if (this.getOffHandStack().getItem() instanceof ShieldItem && Random.create().nextBetween(1, 100) > Random.create().nextBetween(50, 80))
+        {
+            this.getOffHandStack().damage((int) amount, this, new Consumer<DevEntity>() {
+                @Override
+                public void accept(DevEntity devEntity) {
+
+                }
+            });
+            return;
+        }
         if (this.getOwner() != null && this.world.isClient == false)
         {
             if (this.getOwner().isAlive())
             {
-                if (h > 5 && h - amount <= 0)
+                if (h > 0 && h - amount <= 0)
                 {
                     ((ServerWorld)this.world).spawnParticles(ParticleTypes.PORTAL, this.getOwner().getX(), this.getOwner().getY(), this.getOwner().getZ(), 40, 0, 0, 0, 1);
                     ItemStack devItem = new ItemStack(ModItems.DEV_ITEM, 1);
@@ -556,24 +662,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
                     this.getOwner().setStackInHand(Hand.MAIN_HAND, devItem);
 
                     discard();
-                }
-            }
-            else
-            {
-                if (h > 5 && h - amount <= 0)
-                {
-                    ((ServerWorld)this.world).spawnParticles(ParticleTypes.PORTAL, this.getX(), this.getY(), this.getZ(), 40, 0, 0, 0, 1);
-                    ItemStack devItem = new ItemStack(ModItems.DEV_ITEM, 1);
-
-                    DEV_CONSTS.setInventoryStacks(devItem.getNbt(), this.getInventoryStacks());
-                    DEV_CONSTS.setState(devItem.getNbt(), this.getState());
-                    devItem.getNbt().putBoolean(DEV_CONSTS.NBT_KEY_AI_CONTROL, this.IsDevAIcontrolled());
-                    DEV_CONSTS.setHP(devItem.getNbt(), (int)1);
-                    DEV_CONSTS.setOwner(devItem.getNbt(), this.getOwner().getUuid());
-
-                    ItemScatterer.spawn(this.world, this.getX(), this.getY(), this.getZ(), devItem);
-
-                    discard();
+                    return;
                 }
             }
         }
@@ -606,11 +695,17 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
     @Override
     public boolean cannotDespawn() {
+        despawnCounter = 0;
         return  true;
     }
 
     @Override
     public boolean isImmuneToExplosion() {
+        return true;
+    }
+
+    @Override
+    public boolean isFireImmune() {
         return true;
     }
 
@@ -621,7 +716,7 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
     public SoundEvent getAmbientSound()
     {
-        return SoundEvents.ENTITY_ALLAY_AMBIENT_WITH_ITEM;
+        return ModSounds.DEV_AMBIENT;
     }
 
     @Override
@@ -680,6 +775,10 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     {
         return DevState.valueOf(this.dataTracker.get(TrackedDevState));
     }
+    public DevHealthState getDevHealthState()
+    {
+        return DevHealthState.valueOf(this.dataTracker.get(TrackedDevHealthState));
+    }
 
     private NbtCompound PersistentData;
 
@@ -697,9 +796,9 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
     public Boolean IsDevAIcontrolled() { return this.dataTracker.get(TrackedDevAI); }
     public Boolean IsDevOwnerLookin() { return this.dataTracker.get(TrackedDevOwnerLookingAtEntity); }
-
+    public Boolean IsDevCharged() { return (this.dataTracker.get(TrackedRageState) > 0) ? true : false; }
+    public void ModifyDevCharged(int val) { this.dataTracker.set(TrackedRageState, this.dataTracker.get(TrackedRageState) + val); }
     public void setDevAIcontrol(Boolean val) { this.dataTracker.set(TrackedDevAI, val); }
-
     public int getMainCooldown() { return this.dataTracker.get(TrackedMainCooldown); }
     public void setMainCooldown(int ticks) { this.dataTracker.set(TrackedMainCooldown, ticks); }
 
@@ -828,13 +927,56 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
     public ScreenHandler createMenu(int syncId, PlayerEntity player)
     {
-        return new DevScreenHandler(
-                syncId,
-                player.getInventory(),
-                this.getInventory(),
-                ItemStack.EMPTY,
-                this
-        );
+        if (this.getDevHealthState() == DevHealthState.BIT_INFECTED)
+        {
+            return new Damaged1DevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    this.getInventory(),
+                    ItemStack.EMPTY,
+                    this
+            );
+        }
+        else if (this.getDevHealthState() == DevHealthState.NEAR_INFECTED)
+        {
+            return new Damaged2DevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    this.getInventory(),
+                    ItemStack.EMPTY,
+                    this
+            );
+        }
+        else if (this.getDevHealthState() == DevHealthState.ALMOST_INFECTED)
+        {
+            return new Damaged3DevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    this.getInventory(),
+                    ItemStack.EMPTY,
+                    this
+            );
+        }
+        else if (this.getDevHealthState() == DevHealthState.COMPLETELY_INFECTED)
+        {
+            return new Damaged4DevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    this.getInventory(),
+                    ItemStack.EMPTY,
+                    this
+            );
+        }
+        else
+        {
+            return new NormalDevScreenHandler(
+                    syncId,
+                    player.getInventory(),
+                    this.getInventory(),
+                    ItemStack.EMPTY,
+                    this
+            );
+        }
     }
 
     public Text getInventoryDisplayName() {
@@ -847,15 +989,22 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
     public static final RawAnimation ATTACK_ANIM = RawAnimation.begin().thenPlay("attack");
     public static final RawAnimation LEAP_ANIM = RawAnimation.begin().thenPlay("spin");
+    public static final RawAnimation BACKFLIP_ANIM = RawAnimation.begin().thenPlay("spin");
 
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
-        controllers.add(new AnimationController<>(this, "controller", 5, state -> {
+        controllers.add(new AnimationController<>(this, "controller", 0, state -> {
             DevEntity dev = (DevEntity) state.getAnimatable();
             if (dev.getDevState() == DevState.sitting)
             {
                 RawAnimation SitAnimation = RawAnimation.begin().thenLoop("sit");
                 return state.setAndContinue(SitAnimation);
+            }
+
+            if (dev.isSwimming())
+            {
+                RawAnimation MoveAnimation = RawAnimation.begin().thenLoop("swim");
+                return state.setAndContinue(MoveAnimation);
             }
 
             if (state.isMoving())
@@ -871,9 +1020,10 @@ public class DevEntity extends TameableEntity implements GeoEntity {
 
         }));
 
-        controllers.add(new AnimationController<>(this, "other", 5, animationState -> PlayState.CONTINUE)
+        controllers.add(new AnimationController<>(this, "other", 0, animationState -> PlayState.CONTINUE)
                 .triggerableAnim("attack", ATTACK_ANIM)
                 .triggerableAnim("leap", LEAP_ANIM)
+                .triggerableAnim("backflip", BACKFLIP_ANIM)
         );
     }
 
@@ -890,5 +1040,392 @@ public class DevEntity extends TameableEntity implements GeoEntity {
     public int getHandEffectAnimTickrate()
     {
         return this.dataTracker.get(TrackedParticleEffectsAnimTickrate);
+    }
+
+    public EntityNavigation waterNav;
+    public EntityNavigation landNav;
+
+    @Override
+    public boolean isPushedByFluids() {
+        return !this.isSwimming();
+    }
+
+    @Override
+    public void travel(Vec3d movementInput) {
+        if (this.canMoveVoluntarily() && this.isTouchingWater() && this.getUnderwaterTarget() != null)
+        {
+            this.updateVelocity(0.1f, movementInput);
+            this.move(MovementType.SELF, this.getVelocity());
+            this.setVelocity(this.getVelocity().multiply(.9));
+        }
+        else
+        {
+            super.travel(movementInput);
+        }
+    }
+
+    public void HandleWaterTarget()
+    {if (this.IsDevCalled())
+        {
+            if (this.getOwner() != null && this.getOwner().isAlive()) this.waterTarget = this.getOwner();
+        }
+        else
+        {
+            if (this.getTarget() != null && this.getTarget().isAlive()) this.waterTarget = this.getTarget();
+        }
+    }
+
+
+    @Override
+    public void updateSwimming() {
+        if (!this.world.isClient) {
+            if (this.canMoveVoluntarily() && this.isTouchingWater() && this.isTargetingUnderwater()) {
+                this.navigation = this.waterNav;
+                this.setSwimming(true);
+            } else {
+                this.navigation = this.landNav;
+                this.setSwimming(false);
+            }
+        }
+    }
+
+    static class DevMoveControl
+            extends MoveControl {
+        private final DevEntity dev;
+
+        public DevMoveControl(DevEntity dev) {
+            super(dev);
+            this.dev = dev;
+        }
+
+        @Override
+        public void tick() {
+            if (this.dev.isTouchingWater())
+            {
+                if (dev.getUnderwaterTarget() != null)
+                {
+                    if (this.dev.isTargetingUnderwater()) {
+                        if (this.state != MoveControl.State.MOVE_TO || this.dev.getNavigation().isIdle()) {
+                            this.dev.setMovementSpeed(0.0f);
+                            return;
+                        }
+                        if (dev.getUnderwaterTarget() != null && dev.getUnderwaterTarget().getY() > this.dev.getY() || this.dev.isTargetingUnderwater()) {
+                            this.dev.setVelocity(this.dev.getVelocity().add(0.0, 0.002, 0.0));
+                        }
+                        double d = this.targetX - this.dev.getX();
+                        double e = this.targetY - this.dev.getY();
+                        double f = this.targetZ - this.dev.getZ();
+                        double g = Math.sqrt(d * d + e * e + f * f);
+                        e /= g;
+                        float h = (float)(MathHelper.atan2(f, d) * 57.2957763671875) - 90.0f;
+                        this.dev.setYaw(this.wrapDegrees(this.dev.getYaw(), h, 90.0f));
+                        this.dev.bodyYaw = this.dev.getYaw();
+                        float i = (float)(this.speed * this.dev.getAttributeValue(EntityAttributes.GENERIC_MOVEMENT_SPEED));
+                        float j = MathHelper.lerp(0.125f, this.dev.getMovementSpeed(), i);
+                        this.dev.setMovementSpeed(j);
+                        this.dev.setVelocity(this.dev.getVelocity().add((double)j * d * 0.005, (double)j * e * 0.1, (double)j * f * 0.005));
+                    }
+                    else
+                    {
+                        if (this.dev.getUnderwaterTarget().getY() > this.dev.getY())
+                        {
+                            this.dev.jump();
+                        }
+                        else
+                        {
+                            this.dev.setVelocity(this.dev.getVelocity().add(0.0, -0.01, 0.0));
+                        }
+                        super.tick();
+                    }
+                }
+                else {
+                    if (!this.dev.onGround)
+                    {
+                        this.dev.setVelocity(this.dev.getVelocity().add(0.0, -0.002, 0.0));
+                    }
+                    super.tick();
+                }
+            }
+            else
+            {
+                super.tick();
+            }
+        }
+    }
+
+    private boolean isTargetingUnderwater()
+    {
+        if (this.getUnderwaterTarget() == null) return  false;
+        return (this.getUnderwaterTarget() != null && (this.getUnderwaterTarget().isSubmergedInWater() || this.getUnderwaterTarget().isTouchingWater()));
+    }
+    public LivingEntity getUnderwaterTarget()
+    {
+        if (waterTarget == null) return null;
+        if (waterTarget.isDead())
+        {
+            this.setUnderwaterTarget(null);
+            return null;
+        }
+        return waterTarget;
+    }
+    public void setUnderwaterTarget(LivingEntity target)
+    {
+        waterTarget = target;
+    }
+
+    public boolean IsSearching()
+    {
+        if (this.getOwner() != null)
+        {
+            if (this.getOwner() instanceof PlayerEntity player)
+            {
+                if (player.currentScreenHandler != null && player.currentScreenHandler instanceof DevScreenHandler)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public void HandlePickingUp()
+    {
+        if (IsSearching()) return;
+
+        List<ItemEntity> drops = this.world.getEntitiesByClass(
+                ItemEntity.class,
+                Box.of(this.getPos(), .5, .5, .5),
+                livingEntity -> {
+                    return true;
+                }
+        );
+
+        if (drops.size() == 0) return;
+
+        for (ItemEntity drop : drops)
+        {
+            ItemStack stack = drop.getStack();
+
+            stack = handleStack(stack);
+
+            drop.setStack(stack);
+        }
+    }
+
+    @Nullable
+    @Override
+    public Entity moveToWorld(ServerWorld destination) {
+        return null;
+    }
+
+    public DevEntity moveDevToWorld(ServerWorld destination) {
+        if (!(this.world instanceof ServerWorld) || this.isRemoved()) {
+            return null;
+        }
+        this.world.getProfiler().push("changeDimension");
+        this.detach();
+        this.world.getProfiler().push("reposition");
+        TeleportTarget teleportTarget = this.getTeleportTarget(destination);
+        if (teleportTarget == null) {
+            return null;
+        }
+        this.world.getProfiler().swap("reloading");
+        Object entity = this.getType().create(destination);
+        if (entity != null) {
+            ((DevEntity)entity).copyFrom(this);
+            ((DevEntity)entity).refreshPositionAndAngles(teleportTarget.position.x, teleportTarget.position.y, teleportTarget.position.z, teleportTarget.yaw, ((Entity)entity).getPitch());
+            ((DevEntity)entity).setVelocity(teleportTarget.velocity);
+            destination.onDimensionChanged((DevEntity)entity);
+            if (destination.getRegistryKey() == World.END) {
+                ServerWorld.createEndSpawnPlatform(destination);
+            }
+        }
+        this.removeFromDimension();
+        this.world.getProfiler().pop();
+        ((ServerWorld)this.world).resetIdleTimeout();
+        destination.resetIdleTimeout();
+        this.world.getProfiler().pop();
+        return (DevEntity) entity;
+    }
+
+    public void attractItems()
+    {
+        if (IsSearching()) return;
+
+        List<ItemEntity> drops = this.world.getEntitiesByClass(
+                ItemEntity.class,
+                Box.of(this.getPos(), 10, 10, 10),
+                livingEntity -> {
+                    return true;
+                }
+        );
+
+        for (ItemEntity drop : drops)
+        {
+            double xDir = drop.getX() - this.getX();
+            double yDir = drop.getY() - this.getY();
+            double zDir = drop.getZ() - this.getZ();
+            double magnitude = Math.sqrt(Math.pow(xDir, 2)+Math.pow(yDir, 2)+Math.pow(zDir, 2));
+            Vec3d Velocity = new Vec3d
+                    (xDir/magnitude * -.1,
+                            yDir/magnitude * -.1,
+                            zDir/magnitude * -.1);
+            if (this.world instanceof ServerWorld serverWorld)
+            {
+                serverWorld.spawnParticles(ParticleTypes.END_ROD, drop.getX(), drop.getY(), drop.getZ(), 1, .01, .03, .01, .01);
+            }
+            drop.move(MovementType.SELF ,Velocity);
+        }
+    }
+
+    public ItemStack handleStack(ItemStack input)
+    {
+        ItemStack stack = input;
+        Inventory inv = this.getInventory();
+
+        for (int i = 0; i < inv.size()-2; i++)
+        {
+            if (stack.isEmpty()) break;
+
+            ItemStack invStack = inv.getStack(i);
+
+            if (invStack.isEmpty())
+            {
+                invStack = new ItemStack(stack.getItem(), stack.getCount());
+                invStack.setNbt(stack.getNbt());
+                stack.decrement(invStack.getCount());
+            }
+            else
+            {
+                if (invStack.isItemEqual(stack) && invStack.isStackable() && invStack.getDamage() == stack.getDamage() && invStack.getNbt() == stack.getNbt())
+                {
+                    if (invStack.getCount() + stack.getCount() <= invStack.getMaxCount())
+                    {
+                        int additive = invStack.getCount() + stack.getCount();
+                        invStack.setCount(additive);
+                        invStack.setNbt(stack.getNbt());
+                        stack.decrement(stack.getCount());
+                    }
+                    else
+                    {
+                        int additive = invStack.getMaxCount() - invStack.getCount();
+                        invStack.increment(additive);
+                        invStack.setNbt(stack.getNbt());
+                        stack.decrement(additive);
+                    }
+                }
+            }
+
+            inv.setStack(i, invStack);
+        }
+
+        this.setInventoryStacks(inv);
+
+        return stack;
+    }
+
+    public boolean canInsertStack(ItemStack input)
+    {
+        ItemStack stack = input.copy();
+        Inventory inv = this.getInventory();
+
+        for (int i = 0; i < inv.size()-2; i++)
+        {
+            if (stack.isEmpty()) break;
+
+            ItemStack invStack = inv.getStack(i);
+
+            if (invStack.isEmpty())
+            {
+                invStack = new ItemStack(stack.getItem(), stack.getCount());
+                invStack.setNbt(stack.getNbt());
+                stack.decrement(invStack.getCount());
+            }
+            else
+            {
+                if (invStack.isItemEqual(stack) && invStack.isStackable() && invStack.getDamage() == stack.getDamage() && invStack.getNbt() == stack.getNbt())
+                {
+                    if (invStack.getCount() + stack.getCount() <= invStack.getMaxCount())
+                    {
+                        int additive = invStack.getCount() + stack.getCount();
+                        invStack.setCount(additive);
+                        invStack.setNbt(stack.getNbt());
+                        stack.decrement(stack.getCount());
+                    }
+                    else if (invStack.getCount() == invStack.getMaxCount())
+                    {
+
+                    }
+                    else
+                    {
+                        int additive = invStack.getMaxCount() - invStack.getCount();
+                        invStack.increment(additive);
+                        invStack.setNbt(stack.getNbt());
+                        stack.decrement(additive);
+                    }
+                }
+            }
+
+            inv.setStack(i, invStack);
+        }
+
+        return stack.isEmpty();
+    }
+
+    @Override
+    public boolean isRegionUnloaded() {
+        return false;
+    }
+
+    public void HandleLoading()
+    {
+        if (getEntityWorld() instanceof ServerWorld serverWorld)
+        {
+            curChunk = serverWorld.getWorldChunk(this.getBlockPos());
+            if (curChunk != null)
+            {
+                if (curChunks == null || curChunks.size() == 0)
+                {
+                    curChunks = List.of(curChunk);
+                }
+                else if (curChunks != null && curChunks.size() != 0)
+                {
+                    if (curChunks.size() != 1 && !curChunks.contains(curChunk)) curChunks.add(curChunk);
+                }
+
+                List<Chunk> removedChunks = List.of();
+
+                for (Chunk c : curChunks)
+                {
+                    boolean isAlwaysLoaded = (c == curChunk);
+
+                    serverWorld.setChunkForced(ChunkSectionPos.getSectionCoord(this.getBlockPos().getX()), ChunkSectionPos.getSectionCoord(this.getBlockPos().getZ()), isAlwaysLoaded);
+
+                    if (!isAlwaysLoaded || c != curChunks)
+                    {
+                        if (removedChunks.size() == 0)
+                        {
+                            removedChunks = List.of(c);
+                        }
+                        else
+                        {
+                            removedChunks.add(c);
+                        }
+                    }
+                }
+
+                for (Chunk removed : removedChunks)
+                {
+                    if (curChunks.size() == 1)
+                    {
+                        if (curChunks.get(0).equals(removed)) curChunks = List.of();
+                    }
+                    else if (curChunks.size() > 1)
+                    {
+                        if (curChunks.contains(removed)) curChunks.remove(removed);
+                    }
+                }
+            }
+        }
     }
 }

@@ -22,7 +22,7 @@ public class OnDevChangeStateButtonC2SPacket
         {
             DevEntity dev = DevItem.GetDevFromPlayer(player);
 
-            if (dev != null && dev.isAlive() && dev.isPlayerStaring(player))
+            if (dev != null && dev.isAlive())
             {
                 switch (dev.getDevState())
                 {
