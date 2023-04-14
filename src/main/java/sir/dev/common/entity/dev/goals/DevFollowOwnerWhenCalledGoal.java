@@ -2,11 +2,17 @@ package sir.dev.common.entity.dev.goals;
 
 import net.minecraft.block.BlockState;
 import net.minecraft.block.LeavesBlock;
+import net.minecraft.entity.EntityType;
+import net.minecraft.entity.LightningEntity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.Goal;
 import net.minecraft.entity.ai.pathing.*;
+import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.random.Random;
 import net.minecraft.world.WorldView;
 import sir.dev.common.entity.dev.DevEntity;
 import sir.dev.common.util.DevState;
@@ -136,7 +142,6 @@ public class DevFollowOwnerWhenCalledGoal extends Goal {
     public void stop() {
         this.owner = null;
         DevEntity dev = (DevEntity) this.tameable;
-        dev.setDevCalled(false);
         if (dev.getOwner() != null)
         {
             if (dev.getUnderwaterTarget() == dev.getOwner())
@@ -155,12 +160,13 @@ public class DevFollowOwnerWhenCalledGoal extends Goal {
         if (this.tameable.squaredDistanceTo(this.owner) >= Math.pow(DevEntity.TARGET_DISTANCE, 2)) {
             this.tryTeleport();
         } else {
-            this.tameable.getNavigation().startMovingTo(this.owner, this.speed);
+            this.tameable.getNavigation().startMovingTo(this.owner.getX(), this.owner.getY(), this.owner.getZ(), this.speed);
         }
     }
 
     private void tryTeleport() {
         BlockPos blockPos = this.owner.getBlockPos();
+
         for (int i = 0; i < 10; ++i) {
             int j = this.getRandomInt(-3, 3);
             int k = this.getRandomInt(-1, 1);
@@ -178,8 +184,15 @@ public class DevFollowOwnerWhenCalledGoal extends Goal {
         if (!this.canTeleportTo(new BlockPos(x, y, z))) {
             return false;
         }
+
         this.tameable.refreshPositionAndAngles((double)x + 0.5, y, (double)z + 0.5, this.tameable.getYaw(), this.tameable.getPitch());
         this.navigation.stop();
+
+        LightningEntity lighting = new LightningEntity(EntityType.LIGHTNING_BOLT, tameable.world);
+        lighting.setPos(tameable.getX(), tameable.getY(), tameable.getZ());
+        lighting.setCosmetic(true);
+        lighting.setOnFire(false);
+        tameable.world.spawnEntity(lighting);
         return true;
     }
 

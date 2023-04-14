@@ -14,6 +14,10 @@ public class Damaged4DevScreen extends HandledScreen<Damaged4DevScreenHandler>
     public int BgWidth = 176;
     public int BgHeight = 166+16+16;
 
+    @Override
+    public boolean shouldPause() {
+        return true;
+    }
 
     public Damaged4DevScreen(Damaged4DevScreenHandler handler, PlayerInventory inventory, Text title)
     {

@@ -59,16 +59,12 @@ public class DevCombatAction
         ArrowItem arrowItem = (ArrowItem)(inventory.getStack(arrowStack).getItem() instanceof ArrowItem ? inventory.getStack(arrowStack).getItem() : Items.ARROW);
         PersistentProjectileEntity arrow = arrowItem.createArrow(world, inventory.getStack(arrowStack), dev);
 
-        double xDir = (target.getX() + 5) - arrow.getX();
-        double yDir = (target.getX() + 5) - arrow.getY();
-        double zDir = (target.getX() + 5) - arrow.getZ();
-        double magnitude = Math.sqrt(Math.pow(xDir, 2)+Math.pow(yDir, 2)+Math.pow(zDir, 2));
-        Vec3d Velocity = new Vec3d
-                (xDir/magnitude * 2,
-                        yDir/magnitude * 2,
-                        zDir/magnitude * 2);
+        double xDir = target.getX() - dev.getX();
+        double yDir = target.getBodyY(1) - arrow.getY();
+        double zDir = target.getZ()  - dev.getZ();
+        double g = Math.sqrt(xDir * xDir + zDir * zDir);
 
-        arrow.setVelocity(Velocity);
+        arrow.setVelocity(xDir, yDir + g * (double).2f, zDir, 6,  0);
 
         arrow.setCritical(true);
         if ((j = EnchantmentHelper.getLevel(Enchantments.POWER, mainStack)) > 0) {
@@ -87,20 +83,6 @@ public class DevCombatAction
 
         return arrow;
     }
-
-    /*
-    public void attack(LivingEntity target, float pullProgress) {
-        ItemStack itemStack = this.getArrowType(this.getStackInHand(ProjectileUtil.getHandPossiblyHolding(this, Items.BOW)));
-        PersistentProjectileEntity persistentProjectileEntity = this.createArrowProjectile(itemStack, pullProgress);
-        double d = target.getX() - this.getX();
-        double e = target.getBodyY(0.3333333333333333) - persistentProjectileEntity.getY();
-        double f = target.getZ() - this.getZ();
-        double g = Math.sqrt(d * d + f * f);
-        persistentProjectileEntity.setVelocity(d, e + g * (double)0.2f, f, 1.6f, 14 - this.world.getDifficulty().getId() * 4);
-        this.playSound(SoundEvents.ENTITY_SKELETON_SHOOT, 1.0f, 1.0f / (this.getRandom().nextFloat() * 0.4f + 0.8f));
-        this.world.spawnEntity(persistentProjectileEntity);
-    }
-    */
 
     public void SaveInventoryData()
     {

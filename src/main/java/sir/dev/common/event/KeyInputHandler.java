@@ -19,9 +19,11 @@ public class KeyInputHandler
     public static final String KEY_USE_OFF = "key.devmod.use_dev_off";
     public static final String KEY_SWITCH_AI = "key.devmod.dev_switch_ai";
     public static final String KEY_DEV_TARGET = "key.devmod.dev_target";
+    public static final String KEY_DEV_MENU = "key.devmod.dev_menu";
 
     public static KeyBinding callDevKey;
     public static KeyBinding changeDevStateKey;
+    public static KeyBinding openDevMenu;
     public static KeyBinding useMainKey;
     public static KeyBinding useOffKey;
     public static KeyBinding switchAIKey;
@@ -64,6 +66,11 @@ public class KeyInputHandler
                 ClientPlayNetworking.send(ModNetworking.DEV_OWNER_SETS_TARGET_ID, PacketByteBufs.create());
             }
         });
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if(openDevMenu.wasPressed()) {
+                ClientPlayNetworking.send(ModNetworking.DEV_OPEN_MENU, PacketByteBufs.create());
+            }
+        });
     }
 
     public static void register() {
@@ -77,6 +84,12 @@ public class KeyInputHandler
                 KEY_CHANGE_DEV_STATE,
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_H,
+                KEY_CATEGORY_DEV//adds it to the key group
+        ));
+        openDevMenu = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                KEY_DEV_MENU,
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_Y,
                 KEY_CATEGORY_DEV//adds it to the key group
         ));
         /*

@@ -21,6 +21,10 @@ public class DevScreen extends HandledScreen<NormalDevScreenHandler>
     public int BgWidth = 176;
     public int BgHeight = 166+16+16;
 
+    @Override
+    public boolean shouldPause() {
+        return true;
+    }
 
     public DevScreen(NormalDevScreenHandler handler, PlayerInventory inventory, Text title)
     {

@@ -15,6 +15,7 @@ import org.jetbrains.annotations.NotNull;
 import sir.dev.DevMod;
 import sir.dev.client.screen.ModScreenHandlers;
 import sir.dev.common.entity.dev.DevEntity;
+import sir.dev.common.item.dev.DevItem;
 import sir.dev.common.util.DEV_CONSTS;
 
 import java.util.List;
@@ -24,7 +25,7 @@ public class DevScreenHandler extends ScreenHandler
     private static final int SIZE = DEV_CONSTS.INV_SIZE;
     private final Inventory inventory;
     private final ItemStack provider;
-    private final DevEntity entityHost;
+    public final DevEntity entityHost;
 
     public World world;
 
@@ -61,18 +62,20 @@ public class DevScreenHandler extends ScreenHandler
         inventory.onOpen(playerInventory.player);
         updateToClient();
 
-        this.addSlot(new Slot(inventory, 0, 62+1, 26+1-16));
-        this.addSlot(new Slot(inventory, 1, 62+1, 44+1-16));
-        this.addSlot(new Slot(inventory, 2, 62+1, 62+1-16));
-        this.addSlot(new Slot(inventory, 3, 80+1, 26+1-16));
-        this.addSlot(new Slot(inventory, 4, 80+1, 44+1-16));
-        this.addSlot(new Slot(inventory, 5, 80+1, 62+1-16));
-        this.addSlot(new Slot(inventory, 6, 98+1, 26+1-16));
-        this.addSlot(new Slot(inventory, 7, 98+1, 44+1-16));
-        this.addSlot(new Slot(inventory, 8, 98+1, 62+1-16));
+        this.addSlot(new DevScreenSlot(inventory, 0, 62+1, 26+1-16));
+        this.addSlot(new DevScreenSlot(inventory, 1, 62+1, 44+1-16));
+        this.addSlot(new DevScreenSlot(inventory, 2, 62+1, 62+1-16));
+        this.addSlot(new DevScreenSlot(inventory, 3, 80+1, 26+1-16));
+        this.addSlot(new DevScreenSlot(inventory, 4, 80+1, 44+1-16));
+        this.addSlot(new DevScreenSlot(inventory, 5, 80+1, 62+1-16));
+        this.addSlot(new DevScreenSlot(inventory, 6, 98+1, 26+1-16));
+        this.addSlot(new DevScreenSlot(inventory, 7, 98+1, 44+1-16));
+        this.addSlot(new DevScreenSlot(inventory, 8, 98+1, 62+1-16));
 
         this.addSlot(new CombatDevScreenSlot(inventory, 9, 122+1, 85+1-16, provider));
         this.addSlot(new CombatDevScreenSlot(inventory, 10, 40+1, 85+1-16, provider));
+
+        this.addSlot(new FoodDevScreenSlot(inventory, 11, 80+1, 91+1-16, provider));
 
         addPlayerInventorySlots(playerInventory);
         addHotbarSlots(playerInventory);
@@ -127,6 +130,18 @@ public class DevScreenHandler extends ScreenHandler
     }
 
     @Override
+    protected boolean insertItem(ItemStack stack, int startIndex, int endIndex, boolean fromLast) {
+        if (stack.getItem() instanceof DevItem) return false;
+        return super.insertItem(stack, startIndex, endIndex, fromLast);
+    }
+
+    @Override
+    public boolean canInsertIntoSlot(ItemStack stack, Slot slot) {
+        if (stack.getItem() instanceof DevItem) return false;
+        return super.canInsertIntoSlot(stack, slot);
+    }
+
+    @Override
     public void updateSlotStacks(int revision, List<ItemStack> stacks, ItemStack cursorStack) {
         ApplyChanges();
         super.updateSlotStacks(revision, stacks, cursorStack);
@@ -166,4 +181,6 @@ public class DevScreenHandler extends ScreenHandler
             entityHost.setInventoryStacks(this.inventory);
         }
     }
+
+
 }

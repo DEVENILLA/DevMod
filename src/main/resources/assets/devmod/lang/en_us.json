@@ -1,12 +1,21 @@
 {
   "item.devmod.dev_item" : "§aDev",
+  "item.devmod.sculk_tumor" : "Sculk Tumor",
+  "block.devmod.sculk_monolith" : "The Sculk Monolith",
+  "item.devmod.ancient_infector_spawn_egg" : "The Sculk Reaper Spawn Egg",
+  "item.devmod.ultimate_infector_spawn_egg" : "The Sculk Cell Spawn Egg",
 
-  "entity.devmod.dev" : "Dev",
+  "entity.devmod.dev" : "Dev",s
+  "entity.devmod.ancient_infector" : "The Sculk Reaper",
+  "entity.devmod.ultimate_infector" : "The Sculk Cell",
+  "entity.devmod.ancient_infector_minion" : "Sculk Minion",
 
   "key.category.devmod.dev" : "Dev Mod Keybindings",
   "key.devmod.call_dev" : "Call Dev",
   "key.devmod.use_dev_main" : "Use Dev's main hand item",
   "key.devmod.use_dev_off" : "Use Dev's off hand item",
   "key.devmod.change_state_dev" : "Change Dev State",
-  "key.devmod.dev_switch_ai" : "Switch Dev Controller"
+  "key.devmod.dev_switch_ai" : "Switch Dev Controller",
+  "key.devmod.dev_menu" : "Dev's Menu",
+  "key.devmod.dev_target" : "Set Dev's Target"
 }

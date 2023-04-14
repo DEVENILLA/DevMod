@@ -7,21 +7,21 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.screen.slot.Slot;
 import sir.dev.common.item.ModItems;
+import sir.dev.common.item.dev.DevItem;
 
 import java.util.function.Predicate;
 
 public class DevScreenSlot extends Slot
 {
-    private final ItemStack parentInventoryItem;
 
-    public DevScreenSlot(Inventory inventory, int index, int x, int y, ItemStack parentInventoryItem) {
+    public DevScreenSlot(Inventory inventory, int index, int x, int y) {
         super(inventory, index, x, y);
-        this.parentInventoryItem = parentInventoryItem;
     }
 
     @Override
     public boolean canInsert(ItemStack stack) {
         if (stack.getItem().equals(ModItems.DEV_ITEM)) return false;
+        if (stack.getItem() instanceof DevItem) return false;
         return super.canInsert(stack);
     }
 }

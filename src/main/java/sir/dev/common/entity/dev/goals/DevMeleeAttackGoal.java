@@ -170,6 +170,7 @@ public class DevMeleeAttackGoal
             this.cooldown = Math.max(this.cooldown - 1, 0);
             this.attack(livingEntity, d);
         }
+        dev.getNavigation().startMovingTo(targetX, targetY, targetZ, this.speed);
     }
 
     protected void attack(LivingEntity target, double squaredDistance) {

@@ -83,6 +83,12 @@ public class DevWanderAroundGoal
     }
 
     @Override
+    public void tick() {
+        this.mob.getNavigation().startMovingTo(this.targetX, this.targetY, this.targetZ, this.speed);
+        super.tick();
+    }
+
+    @Override
     public void stop() {
         this.mob.getNavigation().stop();
         super.stop();

@@ -37,6 +37,7 @@ import software.bernie.geckolib.core.animatable.GeoAnimatable;
 import software.bernie.geckolib.loading.json.raw.Bone;
 import software.bernie.geckolib.model.GeoModel;
 import software.bernie.geckolib.renderer.DynamicGeoEntityRenderer;
+import software.bernie.geckolib.renderer.GeoEntityRenderer;
 import software.bernie.geckolib.renderer.GeoRenderer;
 import software.bernie.geckolib.renderer.layer.AutoGlowingGeoLayer;
 import software.bernie.geckolib.renderer.layer.BlockAndItemGeoLayer;
@@ -44,7 +45,7 @@ import software.bernie.geckolib.renderer.layer.GeoRenderLayer;
 import software.bernie.shadowed.eliotlash.mclib.math.functions.classic.Abs;
 
 
-public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
+public class DevEntityRenderer extends GeoEntityRenderer<DevEntity> {
     private static final String LEFT_HAND = "lefthand";
     private static final String RIGHT_HAND = "righthand";
     public ItemStack mainHandItem;
@@ -54,7 +55,7 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
 
         super(renderManager, new DevEntityModel());
 
-        this.shadowRadius = .3f;
+        this.addRenderLayer(new AutoGlowingGeoLayer<>(this));
 
         this.addRenderLayer(new BlockAndItemGeoLayer<>(this)
         {
@@ -111,6 +112,8 @@ public class DevEntityRenderer extends DynamicGeoEntityRenderer<DevEntity> {
                 super.renderStackForBone(poseStack, bone, stack, animatable, bufferSource, partialTick, packedLight, packedOverlay);
             }
         });
+
+        this.shadowRadius = .3f;
     }
 
     @Override

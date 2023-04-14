@@ -5,6 +5,7 @@ import net.minecraft.inventory.Inventory;
 import net.minecraft.item.*;
 import net.minecraft.screen.slot.Slot;
 import sir.dev.common.item.ModItems;
+import sir.dev.common.item.dev.DevItem;
 
 public class CombatDevScreenSlot extends Slot
 {
@@ -17,19 +18,22 @@ public class CombatDevScreenSlot extends Slot
 
     @Override
     public boolean canInsert(ItemStack stack) {
+        if (stack.getItem().equals(ModItems.DEV_ITEM)) return false;
+        if (stack.getItem() instanceof DevItem) return false;
         if (!CheckItemCompatibility(stack.getItem())) return false;
+        if (stack.getItem() instanceof DevItem) return false;
         return super.canInsert(stack);
     }
 
     public boolean CheckItemCompatibility(Item i)
     {
-        if (i instanceof SwordItem) return true;
-        if (i instanceof AxeItem) return true;
-        if (i instanceof BowItem) return true;
-        if (i instanceof CrossbowItem) return true;
-        if (i instanceof ShieldItem) return true;
-        if (i instanceof TridentItem) return true;
-        if (i instanceof BlockItem block && block.getBlock() instanceof TntBlock) return true;
-        return false;
+        if (i instanceof DevItem) return false;
+        return true;
+    }
+
+    public static boolean isCompatible(Item i)
+    {
+        if (i instanceof DevItem) return false;
+        return true;
     }
 }

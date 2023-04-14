@@ -36,6 +36,7 @@ public class OnDevChangeStateButtonC2SPacket
                         dev.setState(DevState.defending);
                     }
                 }
+                dev.setDevCalled(false);
                 dev.ClearTargets();
             }
         }

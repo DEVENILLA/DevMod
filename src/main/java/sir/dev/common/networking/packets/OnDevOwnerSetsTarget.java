@@ -45,7 +45,12 @@ public class OnDevOwnerSetsTarget
 
                 if (entities.size() > 0) target = entities.get(0);
 
-                if (target != null) dev.setTarget(target);
+                if (target != null)
+                {
+                    dev.setTarget(target);
+                    dev.ownerTarget = target;
+                    target.setAttacking(player);
+                }
             }
         }
     }

@@ -6,6 +6,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import sir.dev.DevMod;
+import sir.dev.common.block.ModBlocks;
 
 public class ModItemGroup
 {
@@ -15,7 +16,7 @@ public class ModItemGroup
     {
         DEV_TAB = FabricItemGroup.builder(new Identifier(DevMod.MOD_ID, "devtab"))
                 .displayName(Text.literal("Devenilla's Expansion"))
-                .icon(() -> new ItemStack(ModItems.DEV_ITEM))
+                .icon(() -> new ItemStack(ModItems.SCULK_TUMOR))
                 .build();
     }
 }

@@ -3,6 +3,7 @@ package sir.dev.common.entity.dev.combats;
 import com.ibm.icu.text.MessagePattern;
 import net.minecraft.block.*;
 import net.minecraft.command.argument.EntityAnchorArgumentType;
+import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.*;
@@ -34,6 +35,7 @@ import sir.dev.common.entity.dev.DevEntity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 public class DevCombatHandler
@@ -52,6 +54,12 @@ public class DevCombatHandler
                 dev.playSound(SoundEvents.ENTITY_PLAYER_ATTACK_SWEEP, 4.0f, (1.0f + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2f) * 0.7f);
                 mainStack.use(world, (PlayerEntity) owner, hand);
                 mainStack.finishUsing(world, dev);
+                mainStack.damage(1, dev, new Consumer<DevEntity>() {
+                    @Override
+                    public void accept(DevEntity devEntity) {
+
+                    }
+                });
 
                 for (LivingEntity entity : entities)
                 {
@@ -63,7 +71,7 @@ public class DevCombatHandler
         };
         action.execute();
         action.SaveInventoryData();
-        return getRandomFloat(1f, 3f);
+        return 3;
     }
 
     public static float OnUseAxe(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
@@ -97,6 +105,12 @@ public class DevCombatHandler
 
                 mainStack.use(world, (PlayerEntity) owner, hand);
                 mainStack.finishUsing(world, dev);
+                mainStack.damage(1, dev, new Consumer<DevEntity>() {
+                    @Override
+                    public void accept(DevEntity devEntity) {
+
+                    }
+                });
 
                 dev.playSound(SoundEvents.BLOCK_ANVIL_HIT, 4.0f, (1.0f + (this.world.random.nextFloat() - this.world.random.nextFloat()) * 0.2f) * 0.7f);
 
@@ -143,7 +157,7 @@ public class DevCombatHandler
         };
         action.execute();
         action.SaveInventoryData();
-        return getRandomFloat(2f, 4f);
+        return 4;
     }
 
     public static float OnUseTrident(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
@@ -160,6 +174,12 @@ public class DevCombatHandler
 
                 mainStack.use(world, (PlayerEntity) owner, hand);
                 mainStack.finishUsing(world, dev);
+                mainStack.damage(1, dev, new Consumer<DevEntity>() {
+                    @Override
+                    public void accept(DevEntity devEntity) {
+
+                    }
+                });
 
                 double xDir = target.getX() - dev.getX();
                 double yDir = target.getY() - dev.getY();
@@ -173,11 +193,40 @@ public class DevCombatHandler
                 dev.addVelocity(Velocity);
                 dev.lookAt(EntityAnchorArgumentType.EntityAnchor.FEET, target.getPos());
                 dev.lookAt(EntityAnchorArgumentType.EntityAnchor.EYES, target.getPos());
+
+                Map<Enchantment, Integer> enchantments = EnchantmentHelper.get(mainStack);
+
+                for (Enchantment enchantment : enchantments.keySet()) {
+                    if (enchantment == Enchantments.CHANNELING) {
+                        List<LivingEntity> entities = getAffectableEntitiesInARange(serverWorld, dev, dev.getPos(), 4, 1, 4);
+                        entities.add(target);
+
+                        for (LivingEntity entity : entities)
+                        {
+                            entity.addStatusEffect(new StatusEffectInstance(StatusEffects.SLOWNESS, (int)(3*20), 0));
+                            World world = entity.world;
+                            BlockPos pos = entity.getBlockPos();
+                            LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
+                            lightning.setCosmetic(true);
+                            lightning.refreshPositionAfterTeleport(Vec3d.ofBottomCenter(pos));
+                            entity.damage(DamageSource.LIGHTNING_BOLT, Random.create().nextBetween(0, 10));
+                            world.spawnEntity(lightning);
+                        }
+
+                        BlockPos pos = dev.getBlockPos();
+                        LightningEntity lightning = EntityType.LIGHTNING_BOLT.create(world);
+                        lightning.setCosmetic(true);
+                        lightning.refreshPositionAfterTeleport(Vec3d.ofBottomCenter(pos));
+                        dev.ModifyDevCharged(25);
+                        world.spawnEntity(lightning);
+                    }
+                }
+
             }
         };
         action.execute();
         action.SaveInventoryData();
-        return getRandomFloat(.75f, 2.2f);
+        return 3;
     }
 
     public static float OnUseShield(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
@@ -195,6 +244,12 @@ public class DevCombatHandler
 
                 mainStack.use(world, (PlayerEntity) owner, hand);
                 mainStack.finishUsing(world, dev);
+                mainStack.damage(1, dev, new Consumer<DevEntity>() {
+                    @Override
+                    public void accept(DevEntity devEntity) {
+
+                    }
+                });
 
                 dev.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, (int)(1*20), 0));
                 owner.addStatusEffect(new StatusEffectInstance(StatusEffects.RESISTANCE, (int)(1*20), 0));
@@ -217,7 +272,7 @@ public class DevCombatHandler
         };
         action.execute();
         action.SaveInventoryData();
-        return getRandomFloat(1.75f, 3.5f);
+        return 4;
     }
 
     public static float OnUseTNT(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
@@ -239,7 +294,7 @@ public class DevCombatHandler
                 for (LivingEntity entity : entities)
                 {
                     entity.damage(dmg, Random.create().nextBetween(20, 60));
-                    serverWorld.createExplosion(dev, entity.getX(), entity.getY(), dev.getZ(), 1, World.ExplosionSourceType.MOB);
+                    serverWorld.createExplosion(dev, entity.getX(), entity.getY(), entity.getZ(), 1, World.ExplosionSourceType.MOB);
                     double xDir = entity.getX() - dev.getX();
                     double yDir = entity.getY() - dev.getY();
                     double zDir = entity.getZ() - dev.getZ();
@@ -255,7 +310,7 @@ public class DevCombatHandler
         };
         action.execute();
         action.SaveInventoryData();
-        return getRandomFloat(1.5f, 3.75f);
+        return 4.3F;
     }
 
     public static float OnUseBow(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
@@ -299,7 +354,7 @@ public class DevCombatHandler
         };
         action.execute();
         action.SaveInventoryData();
-        return getRandomFloat(2f, 3f);
+        return 3;
     }
 
     public static float OnUseCrossbow(DevEntity dev, ItemStack MainStack, ItemStack OtherStack, Hand hand)
@@ -348,7 +403,7 @@ public class DevCombatHandler
         };
         action.execute();
         action.SaveInventoryData();
-        return getRandomFloat(.25f, 1.2f);
+        return 1;
     }
 
     public static List<LivingEntity> getAffectableEntitiesInARange(ServerWorld world, DevEntity dev, Vec3d anchorPos, double sizeX, double sizeY, double sizeZ)

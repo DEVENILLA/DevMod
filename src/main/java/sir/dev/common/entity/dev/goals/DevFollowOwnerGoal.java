@@ -171,7 +171,7 @@ public class DevFollowOwnerGoal extends Goal {
         }
         else
         {
-            this.tameable.getNavigation().startMovingTo(this.owner, this.speed);
+            this.tameable.getNavigation().startMovingTo(this.owner.getX(), this.owner.getY(), this.owner.getZ(), this.speed);
         }
     }
 

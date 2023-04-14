@@ -312,6 +312,27 @@ public class DevItem extends Item implements GeoItem {
         return null;
     }
 
+    public static DevEntity GetDevFromPlayer(PlayerEntity player, World world)
+    {
+        world = player.getWorld();
+
+        IEntityDataSaver playerData = (IEntityDataSaver)player;
+        if (playerData.getPersistentData().contains(DEV_CONSTS.NBT_KEY_OWNED_DEV))
+        {
+            if (world instanceof ServerWorld serverWorld)
+            {
+                Entity dev = serverWorld.getEntity(playerData.getPersistentData().getUuid(DEV_CONSTS.NBT_KEY_OWNED_DEV));
+
+                if ( dev != null && dev instanceof DevEntity devEntity && devEntity.isAlive())
+                {
+                    return devEntity;
+                }
+            }
+        }
+
+        return null;
+    }
+
     @Override
     public TypedActionResult<ItemStack> use(World world, PlayerEntity user, Hand hand) {
         if (!world.isClient())

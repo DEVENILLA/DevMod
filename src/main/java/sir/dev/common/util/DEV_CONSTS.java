@@ -1,5 +1,6 @@
 package sir.dev.common.util;
 
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.inventory.Inventories;
 import net.minecraft.inventory.Inventory;
@@ -15,11 +16,12 @@ import net.minecraft.util.math.Vec3d;
 import sir.dev.common.entity.dev.DevEntity;
 import sir.dev.common.item.dev.DevItem;
 
+import java.util.List;
 import java.util.UUID;
 
 public class DEV_CONSTS
 {
-    public static final int INV_SIZE = 11;
+    public static final int INV_SIZE = 12;
     public static final int MAX_HP = 150;
     public static final float HEALTH_BAR_COLOR = 1.0f;
 
@@ -41,6 +43,23 @@ public class DEV_CONSTS
             inv.setStack(i, itemStacks.get(i));
         }
         return inv;
+    }
+
+    public static LivingEntity getClosestEntity(List<LivingEntity> entities, LivingEntity entity) {
+        LivingEntity closestEntity = null;
+        double closestDistance = Double.MAX_VALUE;
+
+        for (LivingEntity e : entities) {
+            if (e != entity && e.isAlive()) {
+                double distance = entity.squaredDistanceTo(e);
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestEntity = e;
+                }
+            }
+        }
+
+        return closestEntity;
     }
 
     public static double GetDistance(Vec3d vec1, Vec3d vec2)
