@@ -194,6 +194,11 @@ public class UltimateInfector extends VexEntity implements GeoEntity {
             this.bossBar.setThickenFog(true);
             this.bossBar.setVisible(true);
             this.bossBar.setPercent(this.getHealth() / this.getMaxHealth());
+
+            if (isSubmergedInWater() || isTouchingWater() && getTarget() != null)
+            {
+                this.moveControl.moveTo(getTarget().getX(), getTarget().getY(), getTarget().getZ(), 1);
+            }
         }
         //SuckBlocks();
 

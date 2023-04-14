@@ -27,7 +27,7 @@ public class ModEntities
     public static final EntityType<AncientInfector> ANCIENT_INFECTOR = Registry.register(
             Registries.ENTITY_TYPE, new Identifier(DevMod.MOD_ID, "ancient_infector"),
             FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, (EntityType<AncientInfector> entityType, World world) -> new AncientInfector(entityType, world))
-                    .dimensions(EntityDimensions.fixed(.6f*3, 2.5f))
+                    .dimensions(EntityDimensions.fixed(.5f*3, 2.5f))
                     .build()
     );
     public static final EntityType<AncientInfectorMinion> ANCIENT_INFECTOR_MINION = Registry.register(
@@ -39,7 +39,7 @@ public class ModEntities
     public static final EntityType<UltimateInfector> ULTIMATE_INFECTOR = Registry.register(
             Registries.ENTITY_TYPE, new Identifier(DevMod.MOD_ID, "ultimate_infector"),
             FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, (EntityType<UltimateInfector> entityType, World world) -> new UltimateInfector(entityType, world))
-                    .dimensions(EntityDimensions.fixed(.6f*3, 2.5f))
+                    .dimensions(EntityDimensions.fixed(.5f*3, 2.5f))
                     .build()
     );
     public static final EntityType<UltimateInfectorMinion> ULTIMATE_INFECTOR_MINION = Registry.register(
